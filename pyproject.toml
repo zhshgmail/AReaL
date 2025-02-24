@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=61.0", "packaging", "torch", "pybind11>=2.10.0", "build>=1.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "realhf"
+description = "ReaL: Efficient RLHF Training of Large Language Models with Parameter Reallocation"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["version"]
+keywords = [
+    "distributed-systems",
+    "reinforcement-learning-from-human-feedback",
+    "large-language-models",
+    "llm-training",
+]
+classifiers = [
+    #   3 - Alpha
+    #   4 - Beta
+    #   5 - Production/Stable
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: GPU :: NVIDIA CUDA :: 12 :: 12.2",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "realhf.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."] # ["."] by default
+# include = ["csrc/*", "realhf/*"] # ["*"] by default
+# exclude = ["tests", "docker"]    # empty by default
+# namespaces = false               # true by default
+
+[tool.isort]
+profile = "black"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.black]
+line-length = 88

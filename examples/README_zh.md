@@ -1,0 +1,485 @@
+# 利用AReaL提升大语言模型推理能力：中文教程
+
+# 前置要求
+
+## 硬件要求
+
+为了能正常完成训练流程，请参照下表确认你的硬件是否满足要求：
+
+|**模型大小**| **1.5B** | **1.5B** |**1.5B** |**7B** |**7B** |
+|---|---|---|---|---|---|
+| 节点    | 1    | 4    | 16    | 4    | 16    |
+| GPU    | 8 张 H800    |    每节点 8 张 H800    |每节点 8 张 H800    |每节点 8 张 H800    |每节点 8 张 H800    |
+| CPU    | 48 核    |   每节点 48 核    |每节点 48 核    |每节点 48 核    |每节点 48 核    |
+| 内存    | 1 TB    |每节点 1 TB|每节点 1 TB    |每节点 1 TB    |每节点 1 TB    |
+| 通信    | NVSwitch    |NVSwitch+RoCE 带宽 3.2 Tbps|NVSwitch+RoCE 带宽 3.2 Tbps|NVSwitch+RoCE 带宽 3.2 Tbps|NVSwitch+RoCE 带宽 3.2 Tbps|
+| 存储    | 1TB    |共享存储（NAS）10TB |共享存储（NAS）10TB |共享存储（NAS）10TB |共享存储（NAS）10TB |
+|总训练时间（小时）|520|150|50|410|130|
+
+关于硬件要求的说明：
+
+-  GPU 需要 80GB 显存，可以选择同级别其他 GPU 型号。
+
+-  单节点训练时可以使用本地存储，但多节点训练必须要提供共享存储，否则无法进行训练。
+
+-  所有训练均采用 16K 的 Context Length
+
+-  总训练时间 = Epoch 数量 * 每个 Epoch 的 Step 数量 * 单步训练时间
+
+    - Epoch 数量默认为 10
+    - 每个 Epoch 的 Step 数量与数据集大小有关。利用我们的数据集， 1.5B 模型每个epoch需要训练 39 步，7B 模型每个epoch需要训练 19 步。不同大小模型使用的batch size也不同
+    - 单步训练时间与 GPU 卡数有关
+
+## 软件要求
+
+本教程提供 Docker镜像。以下是经过测试的软件版本，可以参考如下软件版本进行配置。
+
+||版本说明|
+|---|---|
+|OS|CentOS 7 / Ubuntu 22.04 或其他满足下方软件运行的系统|
+|Nvidia Driver|版本：550.127.08|
+|CUDA|版本：12.5|
+|Git LFS|参考：[Git LFS 安装指南](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) 主要用于下载模型，数据集，AReaL 工程代码|
+|Docker|版本：27.5.1|
+|NVIDIA Container Toolkit|[NVIDIA Container Toolkit 安装指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)|
+|镜像|ghcr.io/inclusionai/areal-runtime:v0.1.0 这个镜像中包含运行依赖和 Ray 的相关组件|
+
+
+# 运行环境配置
+在准备好节点和系统环境之后，按照本节的说明下载 AReaL 工程代码，模型，数据集，然后启动 Ray 集群。
+
+- 如果是多节点训练，请先将共享存储挂载到每个节点的 `/storage` 目录上，后续下载的内容都将放在这个目录下，并且最后挂载到 AReaL 环境镜像的容器里。
+- 由于使用了共享存储，下载操作只需要在一个节点上进行。
+
+## 代码和集群配置
+将 AReaL 项目代码克隆到 `/storage/codes` 中：
+
+
+```bash
+mkdir -p /storage/codes
+cd /storage/codes/
+git clone https://github.com/inclusionAI/AReaL.git
+```
+
+创建集群配置文件 `/storage/ray/cluster_config_on_ray.json`：
+```bash
+mkdir -p /storage/ray/
+cd /storage/ray/
+```
+
+将以下配置写入到 `/storage/ray/cluster_config_on_ray.json`：
+
+```
+{
+    "cluster_type": "ray",
+    "cluster_name": "ray_cluster",
+    "fileroot": "/storage/ray/experiments",
+    "default_mount": "/storage:/storage",
+    "n_gpus_per_node": 8
+}
+```
+
+集群配置文件是运行 AReaL 训练任务的描述文件。其中 fileroot 所指向的路径是训练过程中日志，checkpoint 的存储路径。
+
+## 数据集
+
+我们提供了用于训练的数据集，请下载数据集并放置在 /storage/datasets/
+```bash
+mkdir -p /storage/datasets/
+cd /storage/datasets/
+wget https://huggingface.co/datasets/inclusionAI/AReaL-RL-Data/resolve/main/data/prompts_for_r1_distilled.jsonl?download=true
+wget https://huggingface.co/datasets/inclusionAI/AReaL-RL-Data/resolve/main/data/prompts_for_zero.jsonl?download=true
+wget https://huggingface.co/datasets/inclusionAI/AReaL-RL-Data/resolve/main/data/id2info.json?download=true
+```
+
+## 模型
+我们基于开源模型进行训练，该模型可以从 HuggingFace Hub 直接下载：
+
+```
+mkdir -p /storage/models
+cd /storage/models
+GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+```
+
+你也可以在安装 PyPI 和 huggingface_hub 后利用 huggingface CLI 进行下载，具体请参考[官方文档](https://huggingface.co/docs/huggingface_hub/guides/cli)
+
+## 启动 Ray 集群
+
+在执行这一步之前，请先拉取 AReaL 环境镜像，这个镜像中已经包含了 Ray 相关的组件。
+
+在第一个节点上执行如下命令启动 Ray Head：
+
+```bash
+docker run -d --name r1-ray-head --privileged --gpus all --network host --shm-size 700g -v /storage:/storage ghcr.io/inclusionai/areal-runtime:v0.1.0 /bin/bash -c "ray start --head --port=6379 && tail -f /dev/null"
+```
+
+在除了第一个节点以外的每个节点上执行如下命令启动 Ray Worker（如果只有一个节点，这一步就不用执行了）：
+
+```bash
+# RAY_HEAD_IP 是第一个节点的 IP
+RAY_HEAD_IP=xxx.xxx.xxx.xxx
+docker run -d  r1-ray-worker --privileged --gpus all --network host --shm-size 700g -v /storage:/storage ghcr.io/inclusionai/areal-runtime:v0.1.0 /bin/bash -c "ray start --address=$RAY_HEAD_IP:6379 && tail -f /dev/null"
+```
+
+全部启动完成后，在第一个节点上通过 docker exec 进入容器，查看 Ray 集群的状态：
+
+```bash
+docker exec -it r1-ray-head bash
+ray status
+```
+
+可以看到 Ray 的资源情况，输出如下（这是一个 16 节点 128 卡的集群，根据你的节点数量，这里的输出会有所不同）：
+
+```
+======== Autoscaler status: 2025-02-22 14:08:51.061250 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_d5634ae61bfe6732d957811bed65c8a39f13ece07e0326f941acbc4e
+ 1 node_23b0c08045c9a39bc4c454cae298ee531d9a474215ac5e77a5b01e74
+ 1 node_bc1016320658e92645f29cecb8aaf51c0b7e01a44e8ac9c814dfee59
+ 1 node_4e7d15e9cee9ee0da5d65e45f1e346228c52bc0c557511c6eeab40dc
+ 1 node_c5bcf15e28a00515be5d2a7e8e33d71f0f57cdfaf1003db9e0c74788
+ 1 node_ec3f6ee8f6fdf3a5392bb4dac244668da75d094e084dcbb520ce2525
+ 1 node_dc2f1eef88126ae4ac7902574714af9ab74b78ba037217e73e063639
+ 1 node_a4728608c1fda187dc33bb24e831c42fe5c8a582ad428b6e595933bc
+ 1 node_970379a3ba750ee3b13e31612b6a6b758d50bd4943555b2a13d1bd61
+ 1 node_bf6b658bea9e437fcb642a2d881425662a689d668c92fe1545899b36
+ 1 node_2c69511f410d9360f1d05893fde2c97dd32240e0315afea9b2d286a3
+ 1 node_e4c90c17cc48ad469d123041d3302dcff1f7a82a4805279300812b19
+ 1 node_3f772cbffb206c30b6ccedade83789d78397804bab874ee59563cb96
+ 1 node_429bd5115b5590b612590bb455f2d3ed4f77055d746a184baf807655
+ 1 node_75071820f2c16dc51fa271316b72cd45335ec877c06450d292ab7d54
+ 1 node_6f4323f9038248d82b91321e2c4ca5fa99e65efa2d976c0b896a8964
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/2128.0 CPU
+ 0.0/128.0 GPU
+ 0B/21.08TiB memory
+ 0B/2.91TiB object_store_memory
+
+Demands:
+ (no resource demands)
+```
+
+# RL训练
+
+## 单节点训练
+
+
+只有一个节点的情况下，执行如下命令即可启动训练：
+
+```bash
+docker exec -it r1-ray-head bash
+cd /storage/codes/AReaL
+mkdir /storage/ray/train_batch_logs/
+nohup bash ./examples/train_batch_1.5B_n1.sh &> /storage/ray/train_batch_logs/n1.log &
+```
+
+启动后，通过 `/storage/ray/train_batch_logs/n1.log` 日志文件查看训练的启动信息：
+
+```
+Log Dir: /storage/ray/train_batch_logs/ppo-zero-distill-1.5B-n1/20250222-104411
+Task Count: 1
+2025-02-22 10:44.11 Task 0 started: ppo-zero-distill-1.5B-n1 deepseek-ai__DeepSeek-R1-Distill-Qwen-1.5B prompts.jsonl 1024 8 1 actor_gen:d4p1m2,*:d4p2m1 16384 128 1 0.001
+```
+
+根据 Log Dir，可以查看当前运行的训练任务的具体日志，日志路径为 `{Log Dir}/{任务编号}.log`。比如 `/storage/ray/train_batch_logs/ppo-zero-distill-1.5B-n1/20250222-104411/0.log`：
+
+```
+20250222-10:44:15.581 quickstart INFO: Running ppo-math experiment.
+20250222-10:44:15.581 quickstart INFO: Logs will be dumped to /storage/ray/experiments/logs/root/ppo-zero-distill-1.5B-n1/1024x8-n1
+20250222-10:44:15.581 quickstart INFO: Model checkpoints will be saved to /storage/ray/experiments/checkpoints/root/ppo-zero-distill-1.5B-n1/1024x8-n1
+20250222-10:44:17.100 quickstart INFO: Launching experiments with RAY...
+```
+
+如果运行过程中出现错误（比如出现 Error 关键字），请参考Troubleshooting解决。
+
+## 分布式训练
+
+在进行分布式训练之前，请确保已经启动了 Ray 集群，并且集群状态正常。
+然后在第一个节点（Ray Head 所在节点），进入容器：
+
+```
+docker exec -it r1-ray-head bash
+cd /storage/codes/AReaL
+mkdir /storage/ray/train_batch_logs/
+```
+
+选择匹配硬件环境的一个任务运行即可：
+
+```bash
+# 对应 1.5B 模型 4 节点，日志文件名为 n4.log
+nohup bash ./examples/train_batch_1.5B_n4.sh &> /storage/ray/train_batch_logs/n4.log &
+# 对应 1.5B 模型 16 节点，日志文件名为 n16.log
+nohup bash ./examples/train_batch_1.5B_n16.sh &> /storage/ray/train_batch_logs/n16.log &
+# 对应 7B 模型 4 节点，日志文件名为 7n4.log
+nohup bash ./examples/train_batch_7B_n4.sh &> /storage/ray/train_batch_logs/7n4.log &
+# 对应 7B 模型 16 节点，日志文件名为 7n16.log
+nohup bash ./examples/train_batch_7B_n16.sh &> /storage/ray/train_batch_logs/7n16.log &
+```
+
+启动后，通过 `/storage/ray/train_batch_logs/{对应的日志文件名}.log` 日志文件查看训练的启动信息（以 `7n16.log` 为例）：
+
+```
+Log Dir: /storage/ray/train_batch_logs/ppo-zero-distill-7B-n16/20250222-102631
+Task Count: 1
+2025-02-22 10:26.31 Task 0 started: ppo-zero-distill-7B-n16 deepseek-ai__DeepSeek-R1-Distill-Qwen-7B prompts_7b_progress_20k.jsonl 1024 16 16 vllm.d16p1m4+d32p2m1 16384 128 4 0.01
+```
+
+根据 Log Dir，可以查看当前运行的训练任务的具体日志，日志路径为 `{Log Dir}/{任务编号}.log`。比如 `/storage/ray/train_batch_logs/ppo-zero-distill-7B-n16/20250222-102631/0.log`：
+
+```
+20250222-10:26:34.877 quickstart INFO: Running ppo-math experiment.
+20250222-10:26:34.877 quickstart INFO: Logs will be dumped to /storage/ray/experiments/logs/root/ppo-zero-distill-7B-n16/1024x16-n16
+20250222-10:26:34.877 quickstart INFO: Model checkpoints will be saved to /storage/ray/experiments/checkpoints/root/ppo-zero-distill-7B-n16/1024x16-n16
+20250222-10:26:36.408 quickstart INFO: Launching experiments with RAY...
+```
+
+如果运行过程中出现错误（比如出现 Error 关键字），请参考Troubleshooting解决。
+
+## Commandline Options
+`./examples/train_batch_{1.5/7}B_n{1/4/16}.sh` 脚本包含了预先配置好的训练参数，这些脚本最终都是通过以下命令启动训练的：
+
+```bash
+python3 -m realhf.apps.quickstart ppo-math option1=arg1 option2=arg2 ...
+```
+
+其中`option1=arg1`这些命令行参数是通过[hydra](https://hydra.cc/)进行解析的，其中每一条配置项都是python代码中的`dataclasses.dataclass`。用以下命令可以查看实验中所有可以传递的命令行参数：
+
+```bash
+python3 -m realhf.apps.quickstart ppo-math --show-args
+```
+
+其中重要的参数的说明如下：
+
++ MODE：总是为 ray，参考本教程进行训练时不要改成其他值。
++ BASE_MODEL_PATH：模型的路径
++ DATA_PATH：数据集 jsonl 文件的路径
++ REAL_MATH_METADATA_PATH：设置成数学 metadata 的 json 文件路径，参考troubleshooting。
++ CLUSTER_SPEC_PATH：设置成 cluster_config.json 的路径
+
++ n_nodes：节点数量
++ n_gpus_per_node：每个节点的GPU数量
++ allocation_mode：实验中模型的GPU分配和3D并行策略，推荐的策略主要有以下两种形式:
+    + `actor_gen:d${DP1}p${TP1}m{PP1},*:d{DP2}p{PP2}m{MP2}`: 分别配置生成和推理的并行策略，训练和推理共用所有GPU，可以采用不同的并行策略。两种策略中三个整数相乘均需要等于GPU总量，即DP1xTP1xPP1=DP2xPP2xMP2=#GPU。这种情况下如果希望使用vLLM加速生成，需要设置`actor.vllm.hybrid_train=True`和`actor.vllm.enforce_eager=True`,且PP1必须是1（vLLM推理暂时不支持PP）。
+	+ `vllm.d${DP1}m${TP1}p${PP1}+d${DP2}m${TP2}p${PP2}`: 分别配置vLLM生成和训练的并行策略，生成和训练分离，使用两部分不同的GPU。二者所用的GPU数量相加要等于总的 GPU 数量，即DP1xTP1xPP1+DP2xTP2xPP2=#GPUs。在这种配置下，必须设置`actor.vllm.hybrid_train=False`。可以设置`actor.vllm.enforce_eager=False`加速vLLM生成。使用vLLM时同样需要保证PP1=1。
+
++ exp_ctrl.total_train_epochs：训练的 epoch 数量（即迭代整个数据集的次数）
++ exp_ctrl.save_freq_{epochs|steps|secs}：保存持久化存储模型参数的频率，如果设成 null 会不保存模型
++ exp_ctrl.ckpt_freq_{epochs|steps|secs}：保存临时参数用于重启的频率
++ dataset.train_bs_n_seqs：训练的批量大小，即每次训练需要采样的 prompt 数量
++ group_size：每个 prompt 需要采样的答案数量
++ {actor_train|ref_inf}.mb_spec.max_tokens_per_mb：reference模型推理和actor模型训练每次forward/backward数据中最大的token数量，可以减小以避免OOM错误。这些数据会累积梯度进行一次参数更新。
++ ppo.ppo_n_minibatches：每次PPO更新中会把所有数据划分成多少份以此进行loss计算和参数更新。
++ ppo.gen.max_new_tokens：每条prompt生成的最大token数，默认训练脚本中为16k。
++ ppo.gen.min_new_tokens：每条prompt生成的最小token数，默认为0。
+
+
+## 过程观测
+这里以 16 节点的运行日志为例（1 节点和 4 节点也一样），说明几个观察训练进度和效果的方法。
+
+### 查看训练进度
+
+搜索日志中的 Epoch 关键字，查看总的 Epoch 数量和 Step 数量：
+
+```bash
+# grep "Epoch" /storage/ray/train_batch_logs/ppo-zero-distill-7B-n16/20250222-102631/0.log
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-11:11:56.997 master worker INFO: Epoch 1/1 step 1/19 (global step 1) finishes. Average #tokens per batch is 111847. #End to end# execution time: *2124.429*s. Total time consumption: 2283.862s. 
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-11:52:02.719 master worker INFO: Epoch 1/1 step 2/19 (global step 2) finishes. Average #tokens per batch is 111847. #End to end# execution time: *2405.716*s. Total time consumption: 4689.584s. 
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-12:27:25.084 master worker INFO: Epoch 1/1 step 3/19 (global step 3) finishes. Average #tokens per batch is 111847. #End to end# execution time: *2122.318*s. Total time consumption: 6811.949s. Estimated remaining time: 33957.093s. 
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-13:05:58.246 master worker INFO: Epoch 1/1 step 4/19 (global step 4) finishes. Average #tokens per batch is 111847. #End to end# execution time: *2313.134*s. Total time consumption: 9125.111s. Estimated remaining time: 33265.891s. 
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-13:44:14.349 master worker INFO: Epoch 1/1 step 5/19 (global step 5) finishes. Average #tokens per batch is 111847. #End to end# execution time: *2296.076*s. Total time consumption: 11421.214s. Estimated remaining time: 31413.800s. 
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-14:22:33.864 master worker INFO: Epoch 1/1 step 6/19 (global step 6) finishes. Average #tokens per batch is 111847. #End to end# execution time: *2299.448*s. Total time consumption: 13720.729s. Estimated remaining time: 29350.673s.
+```
+
+出现了 6 条日志信息，以最后一条信息的内容说明各个字段的含义：
++ `Epoch 1/1`：表示总共需要训练 1 个 Epochs，当前在训练第 1 个。这里作为例子总共只训练 1 个 Epoch，正常训练应该是 10 个 Epochs 或者更多。
++ `step 6/19`：表示当前 Epoch 有 19 个 Steps，当前在训练第 6 个
++ `global step 6`： 表示当前 Step 在所有 Epochs 的 Steps 里的序号
++ `#End to end# execution time: *2299.448*s`：表示当前 Step 训练耗费了 2299.448 秒
++ `Total time consumption: 13720.729s`：从训练启动开始一共耗费了 13720.729 秒
++ `Estimated remaining time: 29350.673s`：预计完成训练还需要 29350.673 秒
+
+
+### 查看训练的效果
+
+搜索日志中的 `task_reward` 关键字
+
+```bash
+# grep "task_reward" /storage/ray/train_batch_logs/ppo-zero-distill-7B-n16/20250222-102631/0.log
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-11:11:56.991 master worker INFO: RPC name actor_train returns {'ppo_approx_kl': -2.2640759198111482e-05, 'actor_loss': 1.1128166761409375e-06, 'actor_clip_ratio': 2.1122002635820536e-07, 'importance_weight': 1.0000014305114746, 'task_reward': -0.2996826171875, 'kl_reward': -2.27004832709099e-07, 'final_reward': -0.30145370960235596, 'advantage': 0.003593671601265669, 'avg_seq_len': 7907.8955078125, 'avg_prompt_len': 105.845703125, 'n_tokens': 127828786.0, 'n_valid_tokens': 127828786.0, 'n_seqs': 16384.0, 'no_eos_ratio': 0.122802734375, 'disable_value': 1.0, 'mask_no_eos_with_zero': 0.0}
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-11:52:02.712 master worker INFO: RPC name actor_train returns {'ppo_approx_kl': -2.493159263394773e-05, 'actor_loss': -3.846728588996484e-07, 'actor_clip_ratio': 3.16789424914532e-07, 'importance_weight': 0.9999996423721313, 'task_reward': -0.6793212890625, 'kl_reward': -2.536311853873485e-07, 'final_reward': -0.6813737154006958, 'advantage': 0.004844569601118565, 'avg_seq_len': 8203.9453125, 'avg_prompt_len': 111.892578125, 'n_tokens': 132580185.0, 'n_valid_tokens': 132580185.0, 'n_seqs': 16384.0, 'no_eos_ratio': 0.13812255859375, 'disable_value': 1.0, 'mask_no_eos_with_zero': 0.0}
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-12:27:25.077 master worker INFO: RPC name actor_train returns {'ppo_approx_kl': -2.572356243035756e-05, 'actor_loss': -5.036404786551429e-07, 'actor_clip_ratio': 1.8960582792715286e-07, 'importance_weight': 0.9999992251396179, 'task_reward': -0.6280517578125, 'kl_reward': -2.988609537624143e-07, 'final_reward': -0.6303607225418091, 'advantage': 0.004505862481892109, 'avg_seq_len': 7834.6328125, 'avg_prompt_len': 108.900390625, 'n_tokens': 126578395.0, 'n_valid_tokens': 126578395.0, 'n_seqs': 16384.0, 'no_eos_ratio': 0.11761474609375, 'disable_value': 1.0, 'mask_no_eos_with_zero': 0.0}
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-13:05:58.239 master worker INFO: RPC name actor_train returns {'ppo_approx_kl': -2.4861981728463434e-05, 'actor_loss': 1.3935685672095133e-07, 'actor_clip_ratio': 3.02603467616791e-07, 'importance_weight': 0.9999998807907104, 'task_reward': -0.78857421875, 'kl_reward': -3.672174671009998e-07, 'final_reward': -0.791388750076294, 'advantage': 0.005053278990089893, 'avg_seq_len': 7773.39404296875, 'avg_prompt_len': 108.7890625, 'n_tokens': 125576883.0, 'n_valid_tokens': 125576883.0, 'n_seqs': 16384.0, 'no_eos_ratio': 0.117919921875, 'disable_value': 1.0, 'mask_no_eos_with_zero': 0.0}
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-13:44:14.342 master worker INFO: RPC name actor_train returns {'ppo_approx_kl': -2.516058702894952e-05, 'actor_loss': -7.665488510610885e-07, 'actor_clip_ratio': 1.9505058901359007e-07, 'importance_weight': 0.9999997615814209, 'task_reward': -0.6158447265625, 'kl_reward': -4.6867208425283025e-07, 'final_reward': -0.6195111274719238, 'advantage': 0.004475570283830166, 'avg_seq_len': 7928.50830078125, 'avg_prompt_len': 105.517578125, 'n_tokens': 128171874.0, 'n_valid_tokens': 128171874.0, 'n_seqs': 16384.0, 'no_eos_ratio': 0.12353515625, 'disable_value': 1.0, 'mask_no_eos_with_zero': 0.0}
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-14:22:33.857 master worker INFO: RPC name actor_train returns {'ppo_approx_kl': -2.4821250917739235e-05, 'actor_loss': -3.922649227661168e-07, 'actor_clip_ratio': 3.323623900541861e-07, 'importance_weight': 1.0000001192092896, 'task_reward': -0.7025146484375, 'kl_reward': -5.863367960046162e-07, 'final_reward': -0.7071446776390076, 'advantage': 0.004277692176401615, 'avg_seq_len': 8002.4873046875, 'avg_prompt_len': 105.951171875, 'n_tokens': 129376851.0, 'n_valid_tokens': 129376851.0, 'n_seqs': 16384.0, 'no_eos_ratio': 0.12286376953125, 'disable_value': 1.0, 'mask_no_eos_with_zero': 0.0}
+```
+
+以最后一条说明其中几个重点字段的含义：
++ `task_reward`：这个step中采样的所有答案的平均奖励值，训练稳步进行的话这个值会持续上升，最终维持不变
++ `importance_weight`: PPO loss中重要性采样比率在所有token上的平均值，通常接近1。
++ `actor_clip_ratio`: PPO loss中被clip掉的token占所有token的比率，通常小于0.1。
++ `actor_loss`: PPO loss，**不会随着训练过程有明显的上升或下降趋势**，不应作为模型表现的参考。
++ `avg_seq_len`: 这一步中采样的所有答案的平均长度。在完整的多阶段训练中，这个值会先下降再上升。
++ `no_eos_ratio`: 这一步中采样的所有答案因为超出最大生成长度被截断的比率。这个值上升也代表了答案的平均长度在上升。
+
+# 评估
+
+## 评估流程
+
+评估代码包含在仓库的`evaluation`文件夹中。按照以上的教程，训练得到的checkpoint会保存在`/storage/ray/experiments/checkpoints/root/`路径下，例如`/storage/ray/experiments/checkpoints/root/ppo-zero-distill-7B-n16/1024x16-n16/actor/epoch1epochstep20globalstep20/`。
+
+启动一个新的容器用于运行评估脚本（评估需要更新部分 python 库，请不要在训练容器中进行）：
+```
+docker run -d --name r1-eval --privileged --gpus all --network host --shm-size 700g -v /storage:/storage ghcr.io/inclusionai/areal-runtime:v0.1.0 /bin/bash -c "tail -f /dev/null"
+docker exec -it r1-eval bash
+```
+
+在docker容器内部运行以下脚本进行评估：
+
+```bash
+cd /storage/codes/AReaL/evaluation
+cd latex2sympy
+pip install -e .
+cd ..
+pip install -r requirements.txt 
+pip install vllm --no-build-isolation
+pip install transformers==4.47.0
+pip install prettytable timeout_decorator
+mkdir /storage/ray/eval_output/
+nohup python eval_and_aggregate.py \
+	--model_path /storage/ray/experiments/checkpoints/root/ppo-zero-distill-7B-n16/1024x16-n16/actor/epoch1epochstep20globalstep20/ \
+	--output_path /storage/ray/eval_output/ \
+	--data_names "math_500,aime24,amc23" \
+	--max_gen_tokens 32768 &> /storage/ray/eval_output/eval_and_aggregate_parallel.log &
+```
+
++ `--model_path`：模型参数的保存路径
++ `--output_path`：评估过程中生成的答案和日志文件路径
++ `--data_names`: 可以指定评测某个数据，多个数据集用逗号隔开，默认为 math_500, aime24, amc23 
++ `--max_gen_tokens`：最长的答案生成长度，默认值 32768
+
+## 评估结果
+
+评估脚本运行完后会在 /storage/ray/eval_output/eval_and_aggregate_parallel.log 日志文件输出一个表格，例如：
+
+```
++----------+---------------+---------------+---------------+------------+---------------+--------+---------+
+| dataset  | num_questions | greedy_length | sample_length | greedy_acc | sample_pass@1 | pass@8 | pass@16 |
++----------+---------------+---------------+---------------+------------+---------------+--------+---------+
+| math_500 |      500      |     6757.4    |     4139.5    |    84.4    |      92.7     |  97.3  |   97.7  |
+|  aime24  |       30      |    19328.0    |    13663.5    |    50.0    |      50.4     |  77.3  |   80.0  |
+|  amc23   |       40      |     8850.0    |     6526.2    |    80.0    |      90.5     |  96.8  |   98.8  |
++----------+---------------+---------------+---------------+------------+---------------+--------+---------+
+```
+
++ `{greedy|sample}_length`: 在greedy或随机采样策略下生成的平均答案长度
++ `greedy_acc`：在greedy采样下的平均准确率
++ `sample_pass@{k}`：在随机采样下平均每k个答案产生正确答案的概率
+
+## 额外说明
+
+### 关键参数
+
++ 我们提供的评估脚本默认采样32次取平均值，采样温度值为0.6
++ 我们发现vLLM的`enforce_eager`参数很大程度影响评估性能，当`enforce_eager=True`时我们才能够复现先前工作汇报的模型表现，否则评估结果会低于先前工作汇报的结果，因此我们会在执行 `eval_and_aggregate_parallel.py` 时将`enforce_eager`强制开启。
+
+由于以上原因，评估过程通常会消耗较长时间。
+
+### 运行时间
+评估的运行时间取决于最长生成长度、数据集的题目数量和模型大小等等。在1台8*H100机器上，7B模型，数据集为`math_500,aime24,amc23`，生成长度为32768，评估脚本运行时间为 5 个小时。
+
+
+# Troubleshooting
+
+如果以下内容没有解答你的问题，欢迎在 GitHub Issue 中进行提问。
+
+## 自动重启
+
+### How to
+
+训练都是通过 `./examples/train_batch_{1.5/7}B_n{1/4/16}.sh` 脚本启动的，脚本中存在如下格式的 1 行启动参数，`train_batch` 脚本在执行完该组参数后自动停止：
+
+```bash
+ALL_PARAMS=(
+    "${EXP_NAME} ${MODEL_NAME} ${DATASET_NAME} 1024 16 ${NODES} ${ALLOCATION_MODE} 16384 128 4 0.01"
+)
+```
+OOM 或硬件故障都会导致训练终止，这种情况下可以手动重新执行一次 `train_batch` 脚本，会自动从上次训练的 recover checkpoint 处继续训练。
+
+如果频繁遇到故障，需要手动重启的情况时，可以修改`train_batch`脚本，设置多组相同的参数，让脚本自动重跑。比如我希望这组训练参数可以重跑3次，那么参数设置为完全相同的3组即可，如下所示：
+```bash
+ALL_PARAMS=(
+    "${EXP_NAME} ${MODEL_NAME} ${DATASET_NAME} 1024 16 ${NODES} ${ALLOCATION_MODE} 16384 128 4 0.01"
+    "${EXP_NAME} ${MODEL_NAME} ${DATASET_NAME} 1024 16 ${NODES} ${ALLOCATION_MODE} 16384 128 4 0.01"
+    "${EXP_NAME} ${MODEL_NAME} ${DATASET_NAME} 1024 16 ${NODES} ${ALLOCATION_MODE} 16384 128 4 0.01"
+)
+```
+
+### 为什么训练任务重启后没有在上次的 Step 之后继续而是从头开始训练了
+
+有以下可能性，请检查：
+
++ 训练脚本里的 EXP_NAME 和TRIAL_NAME与之前的不一样
++ Batch Size（参数里的 1024），Group Size（参数里的 16），节点数（参数里的 ${NODES}）三个值发生了变化
++ 之前的训练没有创建过 recover checkpoint 。默认的 recover checkpoint 规则有 2 个：
+	+ 从第 2 个 step 完成后才生成 recover checkpoint
+	+ 一个 step 训练完成，且距离上次 recover checkpoint 时间超过 600s，则生成一个新的 recover checkpoint。这个参数在 `examples/train_{tiny|small|large}_on_ray.sh` 脚本里，参数名为 ：`exp_ctrl.ckpt_freq_secs=600`。
+
+
+可以通过搜索 Dumped recover 确认是否生成过 recover checkpoint
+
+```bash
+# grep "Dumped recover" /storage/ray/train_batch_logs/ppo-zero-distill-7B-n16/20250222-102631/0.log
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-11:52:02.760 master worker INFO: Dumped recover info to file.
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-12:27:25.105 master worker INFO: Dumped recover info to file.
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-13:05:58.264 master worker INFO: Dumped recover info to file.
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-13:44:14.411 master worker INFO: Dumped recover info to file.
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-14:22:33.883 master worker INFO: Dumped recover info to file.
+(master_worker/0 pid=96390, ip=xxx.xxx.xxx.xxx) 20250222-14:59:44.925 master worker INFO: Dumped recover info to file.
+```
+
+## 一系列OutOfMemory错误
+
+我们提供的脚本已经尽最大努力避免了OOM错误的发生，但是OOM问题仍然会随着训练进行，在内存碎片增加和生成序列长度越来越长时偶尔发生。虽然这些问题通常可以通过自动重启解决，当重启频繁时，用户还可以尝试以下针对性的解决方式。
+
+### torch.cuda.CudaOutOfMemoryError
+
+解决这个问题的关键是定位错误发生的阶段。
+
+- 如果发生在初始化阶段（在进入到actor_gen之前）:
+	- 检查当前GPU上是否存在残留进程。在分布式场景下，可以通过重启ray cluster解决；在单机场景下，可以通过pkill解决。
+- 该错误通常不会发生在actor_gen阶段。
+- 如果发生在ref_inf或actor_train阶段
+	- 改变相应计算任务的microbatch大小，例如`actor_train.mb_spec.max_tokens_per_mb=20480`，这个参数代表每次模型forward/backward的数据最多只会包含20480个token，这个值最小可以设为生成序列的最长长度（包括prompt）
+	- 改变模型的并行策略，即`allocation_mode`，可以尝试减少数据并行的大小，增加张量或流水线并行的大小。
+
+### CUDA error: out of memory
+
+这个问题可能会发生在vLLM初始化CPU KV cache时，表示每台机器的内存不够了。可以减小`actor.vllm.swap_space`解决。
+
+### RuntimeError: Aborted due to the lack of CPU swap space.
+
+问题的原因是序列长、对KV cache需求大，在GPU显存不够时KV cache会被卸载到内存，而内存中设置的swap space不够。这个问题和[Preemption的报错](https://docs.vllm.ai/en/latest/performance/optimization.html)紧密相关。解决方案是增加`actor.vllm.swap_space`，如果同样的错误出现，请减少`actor.vllm.max_num_seqs`并参考[vLLM官方文档](https://docs.vllm.ai/en/latest/performance/optimization.html)。
+
+### CUDA error: an illegal memory access was encountered
+
+通常会在vLLM生成阶段出现，同样是显存不足的一种表现。解决方案包括：
+
+
++ 减小训练batch size或者每个prompt生成的答案数量，但减小后会降低样本效率、延长训练时间
++ [将vLLM的attention backend换成xformers](https://github.com/vllm-project/vllm/issues/5376)
+
+## 其他
+
+### 如何用其他数据集进行训练
+
+数据集需要是是 jsonl 格式的文件，其中每一条数据需要包含两个 key，分别是 prompt，即一道数学问题，和query_id，即这道数学问题的唯一标识符。在准备好数据集后，还需要根据数据集中的题目更新REAL_MATH_METADATA_PATH的内容。metadata 是一个 json 文件，记录了每道题目的答案、来源和解法。训练代码需要根据 metadata 来判断模型是否做对了一道题。
