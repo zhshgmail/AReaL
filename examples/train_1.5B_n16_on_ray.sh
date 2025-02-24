@@ -65,13 +65,10 @@ python3 -m realhf.apps.quickstart ppo-math \
     exp_ctrl.ckpt_freq_secs=600 \
     group_size=${GROUP_SIZE} \
     group_adv_norm=False \
-    mask_indistinctive=False \
     use_dense_reward=False \
-    do_rw_length_normalization=False \
     reward_delta=True \
     rw_type=sparse \
     check_xml_format=False \
-    drop_after_wrong_reward=False \
     actor.type._class=$MODEL_FAMILY \
     actor.path=$BASE_MODEL_PATH \
     actor.vllm.hybrid_train=False \
