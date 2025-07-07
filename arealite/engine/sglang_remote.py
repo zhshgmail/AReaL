@@ -1,24 +1,24 @@
+import asyncio
+import threading
 import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+from queue import Empty, Queue
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
+import aiohttp
+import torch.distributed as dist
+from tensordict import TensorDict
+
+from arealite.api.cli_args import InferenceEngineConfig
+from arealite.api.engine_api import InferenceEngine
 from arealite.api.io_struct import (
     LLMRequest,
     LLMResponse,
-    WeightUpdateMeta,
     RolloutStat,
+    WeightUpdateMeta,
 )
-from arealite.api.engine_api import InferenceEngine
-from realhf.base import logging, pkg_version
-import asyncio
-import aiohttp
-from tensordict import TensorDict
-from typing import Dict, Any, Optional, TYPE_CHECKING, Callable
-from arealite.api.cli_args import InferenceEngineConfig
-from concurrent.futures import ThreadPoolExecutor
-from queue import Queue, Empty
-import torch.distributed as dist
-import traceback
-import threading
-from realhf.base import name_resolve, names
+from realhf.base import logging, name_resolve, names, pkg_version
 
 if TYPE_CHECKING:
     from arealite.api.workflow_api import RolloutWorkflow
@@ -76,7 +76,6 @@ class RemoteSGLangEngine(InferenceEngine):
     async def _rollout_thread_async(self):
         data = None
 
-        
         rollout_tasks: Dict[int, asyncio.Task] = {}
         rid = 0
 
@@ -166,7 +165,6 @@ class RemoteSGLangEngine(InferenceEngine):
                     rollout_tasks.pop(task_rid)
 
                     self.output_queue.put(traj)
-
 
                     with self.lock:
                         self.rollout_stat.running -= 1
@@ -376,7 +374,11 @@ class RemoteSGLangEngine(InferenceEngine):
     def wait(self, count: int, timeout: int, should_accept: Callable) -> TensorDict:
         tik = time.perf_counter()
         accepted = len(self.result_cache)
-        while accepted < count and not self.exiting.is_set() and time.perf_counter() - tik < timeout:
+        while (
+            accepted < count
+            and not self.exiting.is_set()
+            and time.perf_counter() - tik < timeout
+        ):
             try:
                 result = self.output_queue.get(timeout=ROLLOUT_POLL_WAIT_TIME)
                 if should_accept(result):
@@ -390,9 +392,10 @@ class RemoteSGLangEngine(InferenceEngine):
             raise RuntimeError("Rollout engine is exiting, cannot wait for results.")
         if accepted < count:
             raise TimeoutError(
-                f"Timed out waiting for {count} rollouts, "
-                f"only received {accepted}."
+                f"Timed out waiting for {count} rollouts, " f"only received {accepted}."
             )
-        results, self.result_cache = self.result_cache[:count], self.result_cache[count:]
+        results, self.result_cache = (
+            self.result_cache[:count],
+            self.result_cache[count:],
+        )
         return TensorDict.cat(results, dim=0)
-

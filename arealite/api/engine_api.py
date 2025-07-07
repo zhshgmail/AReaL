@@ -1,12 +1,10 @@
 import abc
-from typing import Callable, Dict, List, Any, Optional, TYPE_CHECKING
-import torch
-from dataclasses import dataclass, field
 from concurrent.futures import Future
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 import torch
+from tensordict import TensorDict
 
 from arealite.api.cli_args import MicroBatchSpec
 from arealite.api.io_struct import (
@@ -16,7 +14,7 @@ from arealite.api.io_struct import (
     SaveLoadMeta,
     WeightUpdateMeta,
 )
-from tensordict import TensorDict
+
 if TYPE_CHECKING:
     from arealite.api.workflow_api import RolloutWorkflow
 
@@ -119,7 +117,7 @@ class InferenceEngine(abc.ABC):
         """Asynchronously generate a response for the given request."""
         raise NotImplementedError()
 
-    def submit(self, data: Dict[str, Any], workflow:"RolloutWorkflow") -> None:
+    def submit(self, data: Dict[str, Any], workflow: "RolloutWorkflow") -> None:
         """Asynchronously submit a request to the inference engine. Exits immediately."""
         raise NotImplementedError()
 
@@ -127,6 +125,8 @@ class InferenceEngine(abc.ABC):
         """Wait for a specified number of requests to complete, with a timeout."""
         raise NotImplementedError()
 
-    def rollout(self, data: List[Dict[str, Any]], workflow:"RolloutWorkflow") -> TensorDict:
+    def rollout(
+        self, data: List[Dict[str, Any]], workflow: "RolloutWorkflow"
+    ) -> TensorDict:
         """Submit a batch of requests to the inference engine and wait for the results."""
         raise NotImplementedError()
