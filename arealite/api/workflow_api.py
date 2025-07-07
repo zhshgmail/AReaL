@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict
+
 from tensordict import TensorDict
 
 if TYPE_CHECKING:

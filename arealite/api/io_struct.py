@@ -7,11 +7,10 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
 from transformers import PreTrainedTokenizerFast
 
 from arealite.api.cli_args import GenerationHyperparameters
-
-
 
 
 @dataclass
@@ -44,7 +43,7 @@ class LLMResponse:
     @property
     def input_len(self) -> int:
         return len(self.input_tokens)
-    
+
     @property
     def output_len(self) -> int:
         return len(self.output_tokens)
@@ -154,6 +153,7 @@ class AllocationMode:
             return
         other_alloc.update({"gen": gen_alloc["*"]})
         return other_alloc
+
 
 @dataclass
 class WeightUpdateMeta:

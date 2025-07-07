@@ -1,5 +1,6 @@
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import List
+
 
 @dataclass
 class MicroBatchSpec:
@@ -27,6 +28,7 @@ class MicroBatchSpec:
         )
         fields.update(kwargs)
         return cls(**fields)
+
 
 @dataclass
 class GenerationHyperparameters:

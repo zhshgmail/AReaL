@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Dict, List, Callable
+from typing import Any, Callable, Dict, List
 
 
 class Environment(abc.ABC):
