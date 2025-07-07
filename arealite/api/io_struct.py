@@ -170,3 +170,9 @@ class SaveLoadMeta:
     with_optim: bool
     tokenizer: PreTrainedTokenizerFast | None
     base_model_path: str | None
+
+@dataclass
+class RolloutStat:
+    submitted: int = 0
+    accepted: int = 0
+    running: int = 0

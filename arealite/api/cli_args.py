@@ -68,3 +68,23 @@ class GenerationHyperparameters:
         args = asdict(self)
         args.update(kwargs)
         return GenerationHyperparameters(**args)
+
+@dataclass
+class InferenceEngineConfig:
+    # Used by remote inference engines.
+    server_addrs: List[str] = field(
+        default_factory=list,
+        metadata={"help": "List of server addresses for inference."}
+    )
+    schedule_policy: str = field(
+        default="round_robin",
+        metadata={"help": "Request scheduling policy", "choices": ["round_robin"]},
+    )
+    request_timeout: float = field(
+        default=30.0,
+        metadata={"help": "Timeout for HTTP requests."}
+    )
+    request_retries: int = field(
+        default=3,
+        metadata={"help": "Number of retries for failed requests."}
+    )
