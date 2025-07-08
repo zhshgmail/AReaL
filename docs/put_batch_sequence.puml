@@ -1,0 +1,34 @@
+@startuml PutBatchSequence
+
+participant Client
+participant "AsyncIOSequenceBuffer" as Buffer
+participant "_TensorDictSequenceBuffer" as Internal
+participant "asyncio.Condition" as Lock
+
+Client -> Buffer: put_batch(samples, birth_times)
+Buffer -> Lock: acquire()
+Buffer -> Buffer: _assert_valid_indicator()
+Buffer -> Buffer: find empty indices
+
+alt insufficient space
+    Buffer --> Client: raise BufferFull
+else sufficient space
+    Buffer -> Buffer: set _is_empty[indices] = False
+    Buffer -> Buffer: set _is_being_put[indices] = True
+    Buffer -> Lock: release()
+    
+    Buffer -> Internal: put_batch(indices, samples)
+    Internal -> Internal: create _ReplayEntry for each sample
+    
+    Buffer -> Lock: acquire()
+    Buffer -> Internal: _update_has_keys(indices)
+    Buffer -> Buffer: update _ready_for_rpcs
+    Buffer -> Buffer: set _is_being_put[indices] = False
+    Buffer -> Buffer: set _is_idle[indices] = True
+    Buffer -> Buffer: increment _buf_size
+    Buffer -> Lock: notify(n_rpcs)
+    Buffer -> Lock: release()
+    Buffer --> Client: return indices
+end
+
+@enduml
