@@ -6,8 +6,9 @@ GIT_COMMIT_SHA=${GIT_COMMIT_SHA:?"GIT_COMMIT_SHA is not set"}
 
 echo "GIT_COMMIT_SHA: $GIT_COMMIT_SHA"
 
-# If there is already an image named areal-env, skip.
-if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q 'areal-env:latest'; then
+# If there is already an image for the current environment, skip the build.
+ENV_SHA=$(sha256sum pyproject.toml | awk '{print $1}')
+if docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "areal-env:$ENV_SHA"; then
     echo "Image areal-env already exists, skipping build."
     exit 0
 fi
