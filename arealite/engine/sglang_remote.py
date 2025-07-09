@@ -3,8 +3,8 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
-from queue import Empty, Queue
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from queue import Empty, Full, Queue
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 import aiohttp
 import torch.distributed as dist
@@ -18,7 +18,7 @@ from arealite.api.io_struct import (
     RolloutStat,
     WeightUpdateMeta,
 )
-from realhf.base import logging, name_resolve, names, pkg_version
+from realhf.base import logging, pkg_version
 
 if TYPE_CHECKING:
     from arealite.api.workflow_api import RolloutWorkflow
@@ -31,19 +31,27 @@ if pkg_version.is_available("sglang"):
         SGLANG_TOKEN_OUTPUT_IDENTIFIER = "token_ids"
 
 ROLLOUT_POLL_WAIT_TIME = 0.4
+RID_CACHE_SIZE = 128
 
 
 class RemoteSGLangEngine(InferenceEngine):
 
     def __init__(self, config: InferenceEngineConfig):
+        config.max_concurrent_rollouts = (
+            config.max_concurrent_rollouts or config.consumer_batch_size
+        )
         self.config = config
 
         self.rid_to_address = {}
+        # Maintain the addresses for the recent 128 requests
+        self.rid_queue = []
+
         self.addresses = config.server_addrs
         self.server_idx = 0
 
-        self.input_queue = Queue(maxsize=config.max_concurrent_rollouts)
-        self.output_queue = Queue(maxsize=config.max_concurrent_rollouts)
+        qsize = config.queue_size or config.max_concurrent_rollouts * 10
+        self.input_queue = Queue(maxsize=qsize)
+        self.output_queue = Queue(maxsize=qsize)
         self.result_cache = []
 
         self.exiting = threading.Event()
@@ -51,32 +59,35 @@ class RemoteSGLangEngine(InferenceEngine):
 
         self.rollout_stat = RolloutStat()
 
-    def _get_model_version(self) -> int:
-        name = names.model_version(
-            self.config.experiment_name,
-            self.config.trial_name,
-            "actor",
-        )
-        try:
-            return int(name_resolve.get(name))
-        except name_resolve.NameEntryNotFoundError:
-            return 0
+        self._version = 0
 
     def initialize(self, addr: str | None, ft_spec: Optional[Dict[str, Any]] = None):
         self.rollout_thread = threading.Thread(target=self._rollout_thread)
         self.rollout_thread.start()
 
+    def destroy(self):
+        self.exiting.set()
+        self.rollout_thread.join()
+
+    def set_version(self, version):
+        with self.lock:
+            self._version = version
+
+    def get_version(self):
+        with self.lock:
+            return self._version
+
     def _rollout_thread(self):
         """Thread that runs the rollout loop."""
         try:
-            asyncio.run_coroutine_threadsafe(self._rollout_thread_async())
-        finally:
-            self.exiting.set()
+            asyncio.run(self._rollout_thread_async())
+        except Exception as e:
+            traceback.print_exc()
 
     async def _rollout_thread_async(self):
         data = None
 
-        rollout_tasks: Dict[int, asyncio.Task] = {}
+        rollout_tasks: Dict[str, asyncio.Task] = {}
         rid = 0
 
         try:
@@ -85,7 +96,7 @@ class RemoteSGLangEngine(InferenceEngine):
                 if data is None:
                     try:
                         data, workflow = self.input_queue.get_nowait()
-                        logger.debug(f"Get data from puller: {data}")
+                        logger.info(f"Get data from puller: {data}")
                     except Empty:
                         logger.debug(f"No data from puller stream.")
 
@@ -104,17 +115,17 @@ class RemoteSGLangEngine(InferenceEngine):
                     )
 
                 # Staleness control
-                version = self._get_model_version()
+                version = self.get_version()
                 ofp = self.config.max_head_offpolicyness
                 with self.lock:
                     sample_cnt = self.rollout_stat.accepted + self.rollout_stat.running
-                expected_version = sample_cnt // self.train_batch_size
+                expected_version = sample_cnt // self.config.consumer_batch_size
                 not_staled = expected_version <= ofp + version
                 can_rollout &= not_staled
                 if not not_staled:
                     cannot_rollout_reason.append(
                         f"Staled: expected version ({expected_version}) = "
-                        f"global sample cnt ({sample_cnt}) // batch size ({self.train_batch_size}), "
+                        f"global sample cnt ({sample_cnt}) // batch size ({self.config.consumer_batch_size}), "
                         f"current latest version {version}, "
                         f"offpolicyness {self.config.max_head_offpolicyness}."
                     )
@@ -130,12 +141,12 @@ class RemoteSGLangEngine(InferenceEngine):
                     task = asyncio.create_task(
                         workflow.arun_episode(self, data), name=str(rid)
                     )
-                    rollout_tasks[rid] = task
+                    rollout_tasks[str(rid)] = task
 
                     with self.lock:
                         self.rollout_stat.submitted += 1
                         self.rollout_stat.running += 1
-                        logger.debug(
+                        logger.info(
                             f"Submit rollout rid {rid}. "
                             f"Submit: {self.rollout_stat.submitted}, "
                             f"running: {self.rollout_stat.running}, "
@@ -163,12 +174,18 @@ class RemoteSGLangEngine(InferenceEngine):
                     traj: TensorDict
                     task_rid = task.get_name()
                     rollout_tasks.pop(task_rid)
+                    self.rollout_stat.accepted += 1
 
-                    self.output_queue.put(traj)
+                    try:
+                        self.output_queue.put_nowait(traj)
+                    except Full:
+                        raise RuntimeError(
+                            "Output queue full. Please increase queue_size."
+                        )
 
                     with self.lock:
                         self.rollout_stat.running -= 1
-                        logger.debug(
+                        logger.info(
                             f"Finish rollout {task_rid}. "
                             f"Submit: {self.rollout_stat.submitted}, "
                             f"running: {self.rollout_stat.running}, "
@@ -256,7 +273,11 @@ class RemoteSGLangEngine(InferenceEngine):
         gconfig = req.gconfig
         stop_token_ids = gconfig.stop_token_ids
 
-        assert gconfig.n_samples == 1
+        if gconfig.n_samples != 1:
+            raise ValueError(
+                "RemoteSGLangEngine does not support n_samples > 1. "
+                "Please call generate for multiple times with n_samples = 1."
+            )
         sample_params = {
             "top_p": gconfig.top_p,
             "top_k": gconfig.top_k,
@@ -265,8 +286,8 @@ class RemoteSGLangEngine(InferenceEngine):
             "stop_token_ids": stop_token_ids,
         }
 
+        # NOTE: rid should NOT be passed in payload
         payload = {
-            "rid": req.rid,
             "text": req.text,
             "sampling_params": sample_params,
             "return_logprob": True,
@@ -287,6 +308,17 @@ class RemoteSGLangEngine(InferenceEngine):
         completions = ""
         stop_reason = "length"
 
+        if req.rid in self.rid_to_address:
+            server_addr = self.rid_to_address[req.rid]
+        else:
+            server_addr = self.choose_server()
+            if len(self.rid_queue) >= RID_CACHE_SIZE:
+                # Remove the oldest entry if cache is full
+                oldest_rid = self.rid_queue.pop(0)
+                self.rid_to_address.pop(oldest_rid, None)
+            self.rid_to_address[req.rid] = server_addr
+            self.rid_queue.append(req.rid)
+
         while (
             stop_reason != "stop"
             and len(accumulated_output_tokens) < gconfig.max_new_tokens
@@ -298,6 +330,7 @@ class RemoteSGLangEngine(InferenceEngine):
                 method="POST",
                 max_retries=3,
                 timeout=self.config.request_timeout,
+                target_addr=server_addr,
             )
             result = await response.json()
 
@@ -369,9 +402,12 @@ class RemoteSGLangEngine(InferenceEngine):
             )
 
     def submit(self, data: Dict[str, Any], workflow: "RolloutWorkflow") -> None:
-        self.input_queue.put((workflow, data))
+        try:
+            self.input_queue.put_nowait((data, workflow))
+        except Full:
+            raise RuntimeError("Input queue full. Please increase queue_size.")
 
-    def wait(self, count: int, timeout: int, should_accept: Callable) -> TensorDict:
+    def wait(self, count: int, timeout: float, should_accept: Callable) -> TensorDict:
         tik = time.perf_counter()
         accepted = len(self.result_cache)
         while (
@@ -384,8 +420,9 @@ class RemoteSGLangEngine(InferenceEngine):
                 if should_accept(result):
                     self.result_cache.append(result)
                     accepted += 1
+                else:
                     with self.lock:
-                        self.rollout_stat.accepted += 1
+                        self.rollout_stat.accepted -= 1
             except Empty:
                 time.sleep(ROLLOUT_POLL_WAIT_TIME)
         if self.exiting.is_set():
@@ -399,3 +436,15 @@ class RemoteSGLangEngine(InferenceEngine):
             self.result_cache[count:],
         )
         return TensorDict.cat(results, dim=0)
+
+    def rollout(
+        self, data: List[Dict[str, Any]], workflow: "RolloutWorkflow"
+    ) -> TensorDict:
+        """Submit a batch of requests to the inference engine and wait for the results."""
+        for item in data:
+            self.submit(item, workflow)
+        return self.wait(
+            count=len(data),
+            timeout=self.config.request_timeout,
+            should_accept=lambda x: True,
+        )
