@@ -6,7 +6,7 @@ import itertools
 import re
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from transformers import PreTrainedTokenizerFast
 
@@ -161,6 +161,7 @@ class WeightUpdateMeta:
     path: str | None
     alloc_mode: AllocationMode | None
     comm_backend: str | None
+    model_version: int = 0
 
 
 @dataclass

@@ -14,9 +14,9 @@ from arealite.api.cli_args import (
     InferenceEngineConfig,
     SGLangConfig,
 )
-from arealite.api.io_struct import FinetuneSpec, LLMRequest, LLMResponse
+from arealite.api.io_struct import LLMRequest, LLMResponse, WeightUpdateMeta
 from realhf.api.core.data_api import load_hf_tokenizer
-from realhf.base import name_resolve, network, seeding
+from realhf.base import network
 
 EXPR_NAME = "test_sglang_engine"
 TRIAL_NAME = "trial_0"
@@ -186,3 +186,50 @@ def test_remote_sglang_staleness_control(sglang_server, bs, ofp, n_samples):
 
     # exit
     engine.destroy()
+
+
+def test_disk_update_weights_from_fsdp_engine(tmp_path_factory, sglang_server):
+    # setup FSDP engine
+    from arealite.api.cli_args import OptimizerConfig, TrainEngineConfig
+    from arealite.api.io_struct import FinetuneSpec
+    from arealite.engine.fsdp_engine import FSDPEngine
+
+    os.environ["WORLD_SIZE"] = "1"
+    os.environ["RANK"] = "0"
+    os.environ["LOCAL_RANK"] = "0"
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "7777"
+
+    engine_config = TrainEngineConfig(
+        experiment_name=EXPR_NAME,
+        trial_name=TRIAL_NAME,
+        path=MODEL_PATH,
+        optimizer=OptimizerConfig(),
+    )
+    engine = FSDPEngine(engine_config)
+    ft_spec = FinetuneSpec(total_train_epochs=1, dataset_size=100, train_batch_size=2)
+    engine.initialize(None, ft_spec)
+
+    # setup name resolve
+    import realhf.base.name_resolve as name_resolve
+    from realhf.api.cli_args import NameResolveConfig
+
+    nfs_record_root = tmp_path_factory.mktemp("nfs_record_path")
+    name_resolve_config = NameResolveConfig(type="nfs", nfs_record_root=nfs_record_root)
+    name_resolve.reconfigure(name_resolve_config)
+    # initialize SGLang remote engine
+    from arealite.api.cli_args import InferenceEngineConfig
+    from arealite.engine.sglang_remote import RemoteSGLangEngine
+
+    config = InferenceEngineConfig(experiment_name=EXPR_NAME, trial_name=TRIAL_NAME)
+    config.server_addrs = [f"{HOST}:{PORT}"]
+    inf_engine = RemoteSGLangEngine(config)
+    # test update weights
+    path = tmp_path_factory.mktemp("upload_weights_from_disk")
+    update_weight_meta = WeightUpdateMeta(
+        type="disk", path=path, alloc_mode=None, comm_backend=None, model_version=100
+    )
+    future = inf_engine.update_weights(update_weight_meta)
+    engine.upload_weights(update_weight_meta)
+    future.result()
+    assert inf_engine.get_version() == 100

@@ -1,5 +1,15 @@
+import argparse
+import getpass
+import os
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+from hydra import compose as hydra_compose
+from hydra import initialize as hydra_init
+from omegaconf import MISSING, OmegaConf
+
+from realhf.api.cli_args import OptimizerConfig
 
 
 @dataclass
@@ -12,8 +22,8 @@ class MicroBatchSpec:
             "help": "Number of micro-batches (or minimum number if max_tokens_per_mb is set). Used when max_tokens_per_mb is None or as minimum count",
         },
     )
-    max_tokens_per_mb: int = field(
-        default=int(1e12),
+    max_tokens_per_mb: Optional[int] = field(
+        default=None,
         metadata={
             "help": "Maximum tokens per micro-batch. When set, n_mbs becomes the minimum number of micro-batches",
         },
@@ -68,6 +78,59 @@ class GenerationHyperparameters:
         args = asdict(self)
         args.update(kwargs)
         return GenerationHyperparameters(**args)
+
+
+# Train Engine Configs
+@dataclass
+class FSDPWrapPolicy:
+    transformer_layer_cls_to_wrap: Optional[List[str]] = field(
+        default=None,
+        metadata={"help": "A list of transformer layer names for FSDP to wrap."},
+    )
+
+
+@dataclass
+class FSDPEngineConfig:
+    wrap_policy: Optional[FSDPWrapPolicy] = field(
+        default=None,
+        metadata={"help": "FSDP wrap policy, specifying model layers to wrap."},
+    )
+    offload_params: bool = field(
+        default=False,
+        metadata={"help": "Whether to offload FSDP parameters to CPU."},
+    )
+
+
+@dataclass
+class TrainEngineConfig:
+    experiment_name: str
+    trial_name: str
+    path: str = field(default="", metadata={"help": "Path to HuggingFace checkpoint"})
+    attn_impl: str = field(
+        default="flash_attention_2",
+        metadata={
+            "help": "Attention implementation for huggingface transformers model.",
+            "choices": ["flash_attention_2"],
+        },
+    )
+    init_from_scratch: bool = field(
+        default=False, metadata={"help": "Initialize model weights randomly"}
+    )
+    init_critic_from_actor: bool = field(
+        default=False,
+        metadata={"help": "Initialize critic/reward model from LM checkpoint"},
+    )
+
+    # Training Backend Configuration
+    gradient_checkpointing: bool = field(
+        default=True, metadata={"help": "Enable gradient checkpointing"}
+    )
+    bf16: bool = field(default=False, metadata={"help": "Use bf16 precision"})
+    optimizer: Optional[OptimizerConfig] = field(
+        default=None, metadata={"help": "Optimizer configuration"}
+    )
+    backend: str = ""
+    fsdp: FSDPEngineConfig = field(default_factory=FSDPEngineConfig)
 
 
 @dataclass
@@ -236,3 +299,332 @@ class InferenceEngineConfig:
     request_retries: int = field(
         default=3, metadata={"help": "Number of retries for failed requests."}
     )
+
+
+@dataclass
+class SGLangEngineConfig:
+    pass
+
+
+@dataclass
+class ExperimentSaveEvalControl:
+    """Controls the frequency of model saving and evaluation during training.
+
+    Manages independent counters for epochs, steps, and seconds. The model will be saved
+    or evaluated when any specified frequency condition is met.
+
+    Note:
+        - Epoch: Number of full passes through the training dataset
+        - Step: Number of individual training iterations
+        - Seconds: Wall-clock time duration
+    """
+
+    total_train_epochs: int = field(
+        default=1, metadata={"help": "Total number of epochs to train the model."}
+    )
+    # Save control
+    save_freq_epochs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Save frequency in epochs. None disables epoch-based saving."
+        },
+    )
+    save_freq_steps: Optional[int] = field(
+        default=None,
+        metadata={"help": "Save frequency in steps. None disables step-based saving."},
+    )
+    save_freq_secs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Save frequency in seconds. None disables time-based saving."
+        },
+    )
+    # Checkpointing control
+    ckpt_freq_epochs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Checkpoint frequency in epochs. None uses save_freq_epochs. "
+            "Checkpointing is used for recover. Previous checkpoint is overwritten to save space."
+        },
+    )
+    ckpt_freq_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Checkpoint frequency in steps. None disables step-based checkpointing."
+        },
+    )
+    ckpt_freq_secs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Checkpoint frequency in seconds. None disables time-based checkpointing."
+        },
+    )
+    # Evaluation control
+    eval_freq_epochs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Evaluation frequency in epochs. None disables epoch-based evaluation."
+        },
+    )
+    eval_freq_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Evaluation frequency in steps. None disables step-based evaluation."
+        },
+    )
+    eval_freq_secs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Evaluation frequency in seconds. None disables time-based evaluation."
+        },
+    )
+    # Benchmark control
+    benchmark_steps: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Terminate training after this number of steps. "
+            "For benchmarking purposes only. None indicates normal training."
+        },
+    )
+    benchmark_n_seqs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Terminate training after consuming this number of samples. "
+            "For benchmarking purposes only. None indicates normal training."
+        },
+    )
+
+
+@dataclass
+class WandBConfig:
+    mode: str = "disabled"
+    entity: Optional[str] = None
+    project: Optional[str] = None
+    name: Optional[str] = None
+    job_type: Optional[str] = None
+    group: Optional[str] = None
+    notes: Optional[str] = None
+    tags: Optional[List[str]] = None
+    config: Optional[Dict] = None
+
+
+@dataclass
+class SwanlabConfig:
+    project: Optional[str] = None
+    name: Optional[str] = None
+    config: Optional[Dict] = None
+    logdir: Optional[str] = None
+    mode: Optional[str] = "local"
+    api_key: Optional[str] = os.getenv("SWANLAB_API_KEY", None)
+
+
+@dataclass
+class TensorBoardConfig:
+    path: Optional[str] = None
+
+
+def get_user_tmp():
+    user = getpass.getuser()
+    user_tmp = os.path.join("/home", user, ".cache", "realhf")
+    os.makedirs(user_tmp, exist_ok=True)
+    return user_tmp
+
+
+@dataclass
+class NameResolveConfig:
+    type: str = field(
+        default="nfs",
+        metadata={
+            "help": "Type of the distributed KV store for name resolving.",
+            "choices": ["nfs", "etcd3", "ray"],
+        },
+    )
+    nfs_record_root: str = field(
+        default="/tmp/areal/name_resolve",
+        metadata={
+            "help": "Record root for NFS name resolving. Should be available in all nodes."
+        },
+    )
+    etcd3_addr: str = field(
+        default="localhost:2379", metadata={"help": "Address of the ETCD3 server."}
+    )
+    ray_actor_name: str = field(
+        default="ray_kv_store",
+        metadata={"help": "Name of the distributed Ray KV store."},
+    )
+
+
+@dataclass
+class ClusterSpecConfig:
+    name_resolve: NameResolveConfig = field(
+        default_factory=NameResolveConfig,
+        metadata={"help": "Name resolving configuration."},
+    )
+    cluster_name: str = field(
+        default="local",
+        metadata={"help": "Name of the cluster. Used to set specific environs."},
+    )
+    fileroot: str = field(
+        default=get_user_tmp(),
+        metadata={
+            "help": "Root for logs and checkpoints. Should be available to all nodes."
+        },
+    )
+    gpu_type: str = field(
+        default="tesla", metadata={"help": "GPU type of the cluster. Used by slurm."}
+    )
+    mount: str = field(
+        default="/storage:/storage", metadata={"help": "Mount path for slurm."}
+    )
+    gpu_image: str = field(default="", metadata={"help": "slurm image for trainers."})
+    cpu_image: str = field(default="", metadata={"help": "slurm image for CPU jobs."})
+    gpu_infer_image: str = field(
+        default="", metadata={"help": "slurm image for LLM inference."}
+    )
+    node_name_prefix: str = field(
+        default="slurmd-", metadata={"help": "Node prefix for a slurm cluster."}
+    )
+    n_nodes: int = field(
+        default=32,
+        metadata={
+            "help": "The size of the cluster. Used to decide slurm hostname suffix."
+        },
+    )
+    n_gpus_per_node: int = field(
+        default=8,
+        metadata={"help": "GPUs per node (physically)."},
+    )
+
+
+@dataclass
+class DatasetConfig:
+    type: str = field(default="", metadata={"help": "Type of implemented dataset"})
+    batch_size: int = field(
+        default=1, metadata={"help": "Batch size of the dataloader"}
+    )
+    shuffle: bool = field(
+        default=True, metadata={"help": "Whether to shuffle the dataset"}
+    )
+    pin_memory: bool = field(
+        default=False,
+        metadata={
+            "help": "Pin memory for faster data loading (set True for GPU training)"
+        },
+    )
+    num_workers: int = field(
+        default=0, metadata={"help": "Number of worker processes for data loading"}
+    )
+    drop_last: bool = field(default=True)
+
+
+@dataclass
+class TrainerConfig:
+    experiment_name: str = field(
+        default=MISSING,
+        metadata={"help": "Name of the experiment (no '_' or '/'). Required."},
+    )
+    trial_name: str = field(
+        default=MISSING,
+        metadata={"help": "Name of the trial (no '-' or '/'). Required."},
+    )
+    fileroot: str = field(
+        default=get_user_tmp(),
+        metadata={
+            "help": "Root for logs and checkpoints. Should be available to all nodes."
+        },
+    )
+    wandb: WandBConfig = field(
+        default_factory=WandBConfig,
+        metadata={"help": "Weights & Biases configuration."},
+    )
+    swanlab: SwanlabConfig = field(
+        default_factory=SwanlabConfig,
+        metadata={"help": "SwanLab configuration."},
+    )
+    tensorboard: TensorBoardConfig = field(
+        default_factory=TensorBoardConfig,
+        metadata={"help": "TensorBoard configuration. Only 'path' field required."},
+    )
+    allocation_mode: str = field(
+        default="",
+        metadata={
+            "help": "GPU parallel strategy allocation mode. "
+            "Options: manual/heuristic or pattern-based."
+        },
+    )
+    seed: int = field(default=1, metadata={"help": "Random seed for reproducibility."})
+    exp_ctrl: ExperimentSaveEvalControl = field(
+        default_factory=ExperimentSaveEvalControl,
+        metadata={"help": "Experiment save/evaluation control configuration."},
+    )
+
+    tokenizer_path: str = field(default="")
+    mb_spec: MicroBatchSpec = field(default_factory=MicroBatchSpec)
+
+
+@dataclass
+class BaseExperimentConfig:
+    # NOTE: we need this unified config class because different experiments
+    # have different config structures, e.g., GRPO has two engine configs,
+    # but SFT only has a single one. We use subclasses to represent these structures.
+    experiment_name: str = field(
+        default=MISSING,
+        metadata={"help": "Name of the experiment (no '_' or '/'). Required."},
+    )
+    trial_name: str = field(
+        default=MISSING,
+        metadata={"help": "Name of the trial (no '-' or '/'). Required."},
+    )
+    cluster: ClusterSpecConfig = field(
+        default_factory=ClusterSpecConfig,
+        metadata={"help": "Cluster specification. Mainly used by slurm."},
+    )
+    n_nodes: int = field(
+        default=1, metadata={"help": "Number of nodes for experiment."}
+    )
+    n_gpus_per_node: int = field(
+        default=8, metadata={"help": "Number of GPUs per node for this experiment."}
+    )
+    train_dataset: DatasetConfig = field(default_factory=DatasetConfig)
+    valid_dataset: DatasetConfig = field(default_factory=DatasetConfig)
+
+
+@dataclass
+class SFTConfig(BaseExperimentConfig):
+    model: TrainEngineConfig = field(default_factory=TrainEngineConfig)
+    trainer: TrainerConfig = field(default_factory=TrainerConfig)
+
+
+def load_expr_config(argv: List[str], config_cls) -> Tuple[BaseExperimentConfig, str]:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--config", help="The path of the main configuration file", required=True
+    )
+    args, overrides = parser.parse_known_args(argv)
+
+    # Initialize hydra config
+    config_file = Path(args.config).absolute()
+    assert config_file.exists()
+    # hydra only recognize relative paths
+    relpath = Path(
+        os.path.relpath(str(config_file), (Path(__file__).parent).absolute())
+    )
+    hydra_init(config_path=str(relpath.parent), job_name="app", version_base=None)
+    cfg = hydra_compose(
+        config_name=str(relpath.name).rstrip(".yaml"),
+        overrides=overrides,
+    )
+
+    # Merge with the default configuration.
+    # The yaml and commandline can omit some default values defined in python dataclasses.
+    default_cfg = OmegaConf.structured(config_cls)
+    cfg = OmegaConf.merge(default_cfg, cfg)
+    cfg = OmegaConf.to_object(cfg)
+    assert isinstance(cfg, BaseExperimentConfig)
+
+    # Setup environment
+    from realhf.base import constants, name_resolve
+
+    constants.set_experiment_trial_names(cfg.experiment_name, cfg.trial_name)
+    name_resolve.reconfigure(cfg.cluster.name_resolve)
+    return cfg, str(config_file)

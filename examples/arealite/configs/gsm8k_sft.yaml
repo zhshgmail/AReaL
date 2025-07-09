@@ -1,0 +1,53 @@
+experiment_name: gsm8k-sft
+trial_name: trial0
+n_nodes: 1
+n_gpus_per_node: 8
+cluster:
+  name_resolve:
+    type: nfs
+    nfs_record_root: /tmp/areal/name_resolve
+
+model:
+  path: /storage/openpsi/models/Qwen__Qwen3-1.7B/
+  init_from_scratch: false
+  pad_mbs_to_max_tokens: true
+  gradient_checkpointing: false
+  bf16: true
+  optimizer:
+    type: adam
+    lr: 2e-5
+    weight_decay: 0.05
+    beta1: 0.9
+    beta2: 0.95
+    eps: 1e-5
+    lr_scheduler_type: cosine
+    gradient_clipping: 1.0
+  backend: fsdp
+
+trainer:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  fileroot: ${cluster.fileroot}
+  wandb:
+    mode: disabled
+  seed: 1
+  exp_ctrl:
+    total_train_epochs: 1
+    eval_freq_steps: 1
+  tokenizer_path: ${model.path}
+  mb_spec:
+    max_tokens_per_mb: 4096
+
+train_dataset:
+  type: gsm8k-sft
+  batch_size: 128
+  shuffle: true
+  pin_memory: true
+  num_workers: 4
+
+valid_dataset: 
+  type: gsm8k-sft
+  batch_size: 128
+  shuffle: true
+  pin_memory: true
+  num_workers: 4

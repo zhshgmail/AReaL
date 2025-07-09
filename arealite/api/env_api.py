@@ -1,5 +1,5 @@
 import abc
-from typing import Any, Callable, Dict, List
+from typing import Any, Dict, List
 
 
 class Environment(abc.ABC):
@@ -11,7 +11,6 @@ class Environment(abc.ABC):
         For stateful environments, this is where resources are created and
         prepared (e.g., launching a browser).
         """
-        pass
 
     def list_tools(self) -> List[Dict[str, Any]]:
         """Lists all available tools in the environment."""
@@ -27,4 +26,3 @@ class Environment(abc.ABC):
 
         This method is critical for stateful environments (e.g., a browser session).
         """
-        pass

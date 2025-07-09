@@ -21,4 +21,3 @@ def reward_fn(
         Any other attributes in the dataset will be passed as keyword arguments to this function.
     :rtype: float
     """
-    pass

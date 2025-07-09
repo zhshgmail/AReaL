@@ -47,7 +47,14 @@ class TrainEngine(abc.ABC):
 
     def destroy(self):
         """Destroy the engine and release GPU memory."""
-        pass
+
+    def train(self, mode: bool = True):
+        """Set the engine to the train mode."""
+        raise NotImplementedError()
+
+    def eval(self):
+        """Set the engine to the eval mode."""
+        return self.train(False)
 
     def upload_weights(self, meta: WeightUpdateMeta):
         """Upload weights to the inference engine."""
@@ -111,7 +118,6 @@ class InferenceEngine(abc.ABC):
 
     def destroy(self):
         """Destroy the engine and release GPU memory."""
-        pass
 
     def update_weights(self, meta: WeightUpdateMeta) -> Future:
         """Update weights in the inference engine."""

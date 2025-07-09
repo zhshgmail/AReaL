@@ -1,7 +1,6 @@
 import asyncio
 import threading
 import time
-import traceback
 from concurrent.futures import ThreadPoolExecutor
 from queue import Empty, Full, Queue
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
@@ -18,7 +17,7 @@ from arealite.api.io_struct import (
     RolloutStat,
     WeightUpdateMeta,
 )
-from realhf.base import logging, pkg_version
+from realhf.base import logging, name_resolve, names, pkg_version
 
 if TYPE_CHECKING:
     from arealite.api.workflow_api import RolloutWorkflow
@@ -372,26 +371,41 @@ class RemoteSGLangEngine(InferenceEngine):
     def _update_weights(self, meta: WeightUpdateMeta):
         if meta.type == "disk":
             # Update weights from disk
+            # Wait for model checkpoints of meta.version
+            update_name = names.update_weights_from_disk(
+                self.config.experiment_name, self.config.trial_name, meta.model_version
+            )
+            save_timestamp = int(name_resolve.wait(update_name, timeout=120))
+            load_timestamp = time.time_ns()
+            logger.info(
+                f"Begin update weights from {meta.path}, responded in {(load_timestamp - save_timestamp)/1e6:.2f} ms"
+            )
             try:
                 jobs = [
                     self.aupdate_weights_from_disk(addr, meta.path)
                     for addr in self.addresses
                 ]
                 loop = asyncio.new_event_loop()
+                # asyncio event loop should be manually set when running asyncio stuff in another thread
+                asyncio.set_event_loop(loop)
                 loop.run_until_complete(asyncio.gather(*jobs))
             finally:
                 loop.close()
+            logger.info(
+                f"Loading weights done in {(time.time_ns() - load_timestamp)/1e6:.2f} ms"
+            )
+            self.set_version(meta.model_version)
         else:
             raise NotImplementedError(f"Unsupported weight update type: {meta.type}")
 
     async def aupdate_weights_from_disk(self, addr, path: str):
-        response, _ = await self.arequest_with_retry(
+        response = await self.arequest_with_retry(
             endpoint="/update_weights_from_disk",
-            payload=dict(model_path=path, allow_interrupt=True),
+            payload=dict(model_path=str(path), allow_interrupt=True),
             method="POST",
             max_retries=3,
             timeout=self.config.request_timeout,
-            target_server=addr,
+            target_addr=addr,
         )
         res = await response.json()
         assert res["success"]
