@@ -36,5 +36,5 @@ docker run \
         mv ./sglang /sglang
     " || { docker rm -f $RUN_ID; exit 1; }
 
-docker commit $RUN_ID areal-env:latest
+docker commit $RUN_ID "areal-env:$ENV_SHA"
 docker rm -f $RUN_ID
