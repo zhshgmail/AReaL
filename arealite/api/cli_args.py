@@ -18,7 +18,7 @@ from arealite.utils.fs import get_user_tmp
 class MicroBatchSpec:
     """Specification for splitting micro-batches during training."""
 
-    n_mbs: int = field(
+    n_mbs: Optional[int] = field(
         default=1,
         metadata={
             "help": "Number of micro-batches (or minimum number if max_tokens_per_mb is set). Used when max_tokens_per_mb is None or as minimum count",
@@ -161,7 +161,7 @@ class FSDPEngineConfig:
 
 
 @dataclass
-class HFEngineConfig:
+class DeepSpeedAutoTPEngineConfig:
     autotp_size: Optional[int] = field(
         default=1,
         metadata={"help": "DeepSpeed AutoTP size"},
@@ -201,7 +201,88 @@ class TrainEngineConfig:
     )
     backend: str = ""
     fsdp: FSDPEngineConfig = field(default_factory=FSDPEngineConfig)
-    hf: HFEngineConfig = field(default_factory=HFEngineConfig)
+    ds_auto_tp: DeepSpeedAutoTPEngineConfig = field(
+        default_factory=DeepSpeedAutoTPEngineConfig
+    )
+
+
+@dataclass
+class PPOActorConfig(TrainEngineConfig):
+    # Core PPO/GRPO Parameters
+    group_size: int = field(
+        default=1, metadata={"help": "Number of sequences in each group"}
+    )
+    group_adv_norm: bool = field(
+        default=False,
+        metadata={
+            "help": "Normalize advantages within each prompt group rather than globally"
+        },
+    )
+    ppo_n_minibatches: int = field(
+        default=4, metadata={"help": "Number of minibatches for each PPO update"}
+    )
+    eps_clip: float = field(
+        default=0.2, metadata={"help": "Clipping factor for policy ratio"}
+    )
+    c_clip: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": "Dual clipping factor for policy ratio, must > 1.0. None disables dual clipping."
+        },
+    )
+    temperature: float = field(
+        default=1.0, metadata={"help": "Temperature during generation."}
+    )
+    # Reward
+    group_reward_norm: bool = field(
+        default=False,
+        metadata={
+            "help": "Normalize final reward of each sequence (GRPO-style) to reduce length bias"
+        },
+    )
+    reward_scaling: float = field(
+        default=1.0, metadata={"help": "Reward scaling factor"}
+    )
+    reward_bias: float = field(default=0.0, metadata={"help": "Reward bias"})
+    reward_clip: float = field(
+        default=20.0, metadata={"help": "Maximum absolute value for reward clipping"}
+    )
+    mask_no_eos_with_zero: bool = field(
+        default=False,
+        metadata={
+            "help": "Mask truncated generations (no EOS token) and exclude from training"
+        },
+    )
+
+    # Advantage Estimation
+    discount: float = field(
+        default=1.0, metadata={"help": "Discount factor for future rewards"}
+    )
+    gae_lambda: float = field(
+        default=1.0, metadata={"help": "Lambda parameter for GAE"}
+    )
+    adv_norm: bool = field(
+        default=True, metadata={"help": "Enable advantage normalization"}
+    )
+
+    # KL Control
+    kl_ctl: float = field(default=0.1, metadata={"help": "KL divergence coefficient"})
+
+    # Asynchronous RL
+    recompute_logprob: bool = field(
+        default=False,
+        metadata={"help": "Recompute logp and replace the logp returned by inference."},
+    )
+    use_decoupled_loss: bool = field(
+        default=False,
+        metadata={"help": "Use the decoupled loss. recompute_logprob must be True."},
+    )
+    behav_imp_weight_cap: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": "We filter out the tokens where behav_imp_weight exceeds behav_imp_weight_cap when computing the loss, must be > 1.0, use_decoupled_loss must be true"
+        },
+    )
 
 
 @dataclass
