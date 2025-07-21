@@ -676,20 +676,6 @@ class ClusterSpecConfig:
             "help": "Root for logs and checkpoints. Should be available to all nodes."
         },
     )
-    gpu_type: str = field(
-        default="tesla", metadata={"help": "GPU type of the cluster. Used by slurm."}
-    )
-    mount: str = field(
-        default="/storage:/storage", metadata={"help": "Mount path for slurm."}
-    )
-    gpu_image: str = field(default="", metadata={"help": "slurm image for trainers."})
-    cpu_image: str = field(default="", metadata={"help": "slurm image for CPU jobs."})
-    gpu_infer_image: str = field(
-        default="", metadata={"help": "slurm image for LLM inference."}
-    )
-    node_name_prefix: str = field(
-        default="slurmd-", metadata={"help": "Node prefix for a slurm cluster."}
-    )
     n_nodes: int = field(
         default=32,
         metadata={
@@ -726,6 +712,72 @@ class DatasetConfig:
 
 
 @dataclass
+class SlurmLauncherConfig:
+    """Configuration for launching the SGLang server with Slurm."""
+
+    srun_additional_args: str = field(
+        default="--overlap --mpi=pmi2 -K --chdir $PWD",
+        metadata={"help": "Additional arguments to pass to the srun command."},
+    )
+    container_type: str = field(
+        default="apptainer",
+        metadata={
+            "help": "Type of containers used in slurm",
+            "choices": ["apptainer", "none"],
+        },
+    )
+    mount: str = field(
+        default="/storage:/storage", metadata={"help": "Mount path for slurm."}
+    )
+    trainer_image: str = field(
+        default="", metadata={"help": "slurm image for trainers."}
+    )
+    inference_server_image: str = field(
+        default="", metadata={"help": "slurm image for LLM inference."}
+    )
+
+
+@dataclass
+class LauncherConfig:
+    """Configuration for launching the SGLang server."""
+
+    inference_server_cpus_per_gpu: int = field(
+        default=4,
+        metadata={"help": "Number of CPUs allocated per GPU for inference server. "},
+    )
+    inference_server_mem_per_gpu: int = field(
+        default=32 * 1024,
+        metadata={"help": "Memory allocated per GPU for inference server in MB. "},
+    )
+    trainer_cpus_per_gpu: int = field(
+        default=4,
+        metadata={"help": "Number of CPUs allocated per GPU for training. "},
+    )
+    trainer_mem_per_gpu: int = field(
+        default=32 * 1024,
+        metadata={"help": "Memory allocated per GPU for training in MB. "},
+    )
+    inference_server_env_vars: str = field(
+        default="",
+        metadata={
+            "help": "Environment variables for inference server, seperated by commas. "
+            "Example: 'ENV1=val1,ENV2=val2'. "
+        },
+    )
+    trainer_env_vars: str = field(
+        default="",
+        metadata={
+            "help": "Environment variables for training, seperated by commas. "
+            "Example: 'ENV1=val1,ENV2=val2'. "
+        },
+    )
+    slurm: SlurmLauncherConfig = field(
+        default_factory=SlurmLauncherConfig,
+        metadata={"help": "Slurm launcher configuration."},
+    )
+
+
+@dataclass
 class BaseExperimentConfig:
     # NOTE: we need this unified config class because different experiments
     # have different config structures, e.g., GRPO has two engine configs,
@@ -741,12 +793,6 @@ class BaseExperimentConfig:
     cluster: ClusterSpecConfig = field(
         default_factory=ClusterSpecConfig,
         metadata={"help": "Cluster specification. Mainly used by slurm."},
-    )
-    n_nodes: int = field(
-        default=1, metadata={"help": "Number of nodes for experiment."}
-    )
-    n_gpus_per_node: int = field(
-        default=8, metadata={"help": "Number of GPUs per node for this experiment."}
     )
     allocation_mode: str = field(
         default="",
@@ -785,6 +831,7 @@ class BaseExperimentConfig:
 
     server_only: bool = False
     sglang: SGLangConfig = field(default_factory=SGLangConfig)
+    launcher: LauncherConfig = field(default_factory=LauncherConfig)
 
 
 @dataclass
