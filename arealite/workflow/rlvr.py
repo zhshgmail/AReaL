@@ -37,7 +37,7 @@ class RLVRWorkflow(RolloutWorkflow):
             input_ids=input_ids,
             gconfig=self.gconfig.new(n_samples=1),
         )
-        resps = await asyncio.gather(*[engine.agenerate(req) for _ in range(n_samples)])
+        resps = await asyncio.gather(*[engine.agenerate(req, self.tokenizer) for _ in range(n_samples)])
 
         results = []
         for resp in resps:

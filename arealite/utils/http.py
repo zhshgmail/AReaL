@@ -1,4 +1,5 @@
 import asyncio
+import time
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -47,6 +48,7 @@ async def arequest_with_retry(
     else:
         _session = session
 
+    max_retries = 3600
     for attempt in range(max_retries):
         try:
             if verbose:
@@ -79,6 +81,11 @@ async def arequest_with_retry(
             last_exception = e
             if attempt < max_retries - 1:
                 await asyncio.sleep(retry_delay)
+            else:
+                print('===>wait for vLLM server restart.')
+                retry_delay = 15
+                time.sleep(retry_delay)
+
             continue
     if session is None:
         await _session.close()

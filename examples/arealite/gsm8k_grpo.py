@@ -12,6 +12,7 @@ from arealite.api.cli_args import GRPOConfig, load_expr_config
 from arealite.api.io_struct import FinetuneSpec, WeightUpdateMeta
 from arealite.engine.ppo.actor import FSDPPPOActor
 from arealite.engine.sglang_remote import RemoteSGLangEngine
+from arealite.engine.vllm_remote import RemotevLLMEngine
 from arealite.utils.device import log_gpu_stats
 from arealite.utils.evaluator import Evaluator
 from arealite.utils.saver import Saver
@@ -31,7 +32,7 @@ def process_gsm8k_rl_dataset(dataset: Dataset):
 
 
 def get_gsm8k_dataset(split, rank, world_size):
-    dataset = load_dataset(path="openai/gsm8k", name="main", split=split)
+    dataset = load_dataset(path="/data1/s00580798/datasets/gsm8k", name="main", split=split)
     dataset = split_dataset_by_node(dataset, rank=rank, world_size=world_size)
     return process_gsm8k_rl_dataset(dataset)
 
@@ -108,12 +109,14 @@ def main_grpo():
     )
 
     # Initialize inference engine
-    rollout = RemoteSGLangEngine(config.rollout)
+    # rollout = RemoteSGLangEngine(config.rollout)
+    rollout = RemotevLLMEngine(config.rollout)
     rollout.initialize(None, ft_spec)
-    eval_rollout = RemoteSGLangEngine(config.rollout)
-    eval_rollout.initialize(None, ft_spec)
-    # NOTE: set a large version such that eval does not have any offpolicyness control
-    eval_rollout.set_version(int(1e12))
+    # FIXME
+    # eval_rollout = RemoteSGLangEngine(config.rollout)
+    # eval_rollout.initialize(None, ft_spec)
+    # # NOTE: set a large version such that eval does not have any offpolicyness control
+    # eval_rollout.set_version(int(1e12))
 
     # Initialize train engine
     actor = FSDPPPOActor(config=config.actor)
@@ -201,11 +204,14 @@ def main_grpo():
                 comm_backend=None,
                 model_version=global_step + 1,
             )
-            if dist.get_rank() == 0:
-                future = rollout.update_weights(meta)
+            # if dist.get_rank() == 0:
+
+            # FIXME meta.path 需要更新，不能使用sglang的路径
+
+            rollout.update_weights(meta)
             actor.upload_weights(meta)
-            if dist.get_rank() == 0:
-                future.result()
+            # if dist.get_rank() == 0:
+            #     future.result()
             dist.barrier()
             torch.cuda.synchronize()
             rollout.set_version(global_step + 1)
@@ -213,39 +219,41 @@ def main_grpo():
         with stats_tracker.record_timing("save"):
             saver.save(actor, epoch, step, global_step)
 
-        with stats_tracker.record_timing("eval"):
-
-            def evaluate_fn():
-                rollout.pause()
-                cnt = 0
-                for data in valid_dataloader:
-                    for item in data:
-                        eval_rollout.submit(item, workflow)
-                        cnt += 1
-                batch = eval_rollout.wait(cnt, timeout=None)
-                rewards = batch["rewards"].float().to(actor.device)
-                with stats_tracker.scope("grpo-eval"):
-                    stats_tracker.denominator(
-                        n_seqs=torch.ones(
-                            rewards.shape[0],
-                            device=rewards.device,
-                            dtype=torch.bool,
-                        )
-                    )
-                    stats_tracker.stat(task_reward=rewards, denominator="n_seqs")
-                rollout.resume()
-
-            evaluator.evaluate(
-                evaluate_fn,
-                epoch,
-                step,
-                global_step,
-            )
+        # FIXME
+        # with stats_tracker.record_timing("eval"):
+        #
+        #     def evaluate_fn():
+        #         rollout.pause()
+        #         cnt = 0
+        #         for data in valid_dataloader:
+        #             for item in data:
+        #                 eval_rollout.submit(item, workflow)
+        #                 cnt += 1
+        #         batch = eval_rollout.wait(cnt, timeout=None)
+        #         rewards = batch["rewards"].float().to(actor.device)
+        #         with stats_tracker.scope("grpo-eval"):
+        #             stats_tracker.denominator(
+        #                 n_seqs=torch.ones(
+        #                     rewards.shape[0],
+        #                     device=rewards.device,
+        #                     dtype=torch.bool,
+        #                 )
+        #             )
+        #             stats_tracker.stat(task_reward=rewards, denominator="n_seqs")
+        #         rollout.resume()
+        #
+        #     evaluator.evaluate(
+        #         evaluate_fn,
+        #         epoch,
+        #         step,
+        #         global_step,
+        #     )
 
         logger.commit(epoch, step, global_step, stats)
 
     logger.close()
-    eval_rollout.destroy()
+    # FIXME
+    # eval_rollout.destroy()
     rollout.destroy()
     if ref is not None:
         ref.destroy()

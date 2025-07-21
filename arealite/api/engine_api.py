@@ -126,7 +126,7 @@ class InferenceEngine(abc.ABC):
         """Update weights in the inference engine."""
         raise NotImplementedError()
 
-    async def agenerate(self, req: LLMRequest) -> LLMResponse:
+    async def agenerate(self, req: LLMRequest, tokenizer) -> LLMResponse:
         """Asynchronously generate a response for the given request."""
         raise NotImplementedError()
 
