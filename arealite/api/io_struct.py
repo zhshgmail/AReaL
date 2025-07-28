@@ -8,7 +8,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
 
-from transformers import PreTrainedTokenizerFast
+import torch
+from gymnasium.core import ActType, ObsType
+from PIL.Image import Image as ImageObject
+from transformers import AutoProcessor, PreTrainedTokenizerFast
 
 from arealite.api.cli_args import GenerationHyperparameters, SaverConfig
 from arealite.utils.network import find_free_ports, gethostip
@@ -49,6 +52,16 @@ class LLMResponse:
     @property
     def output_len(self) -> int:
         return len(self.output_tokens)
+
+
+@dataclass
+class VLMRequest(LLMRequest):
+    image_data: Optional[List[ImageObject | str]] = field(default_factory=list)
+
+
+@dataclass
+class VLMResponse(LLMResponse):
+    input_images: List[ImageObject | str] = field(default_factory=list)
 
 
 @dataclass
@@ -216,7 +229,8 @@ class SaveLoadMeta:
     path: str
     weight_format: str
     with_optim: bool
-    tokenizer: Optional[PreTrainedTokenizerFast]
+    tokenizer: PreTrainedTokenizerFast | None
+    processor: AutoProcessor | None
     base_model_path: str | None
     naive_distributed: bool = False
 

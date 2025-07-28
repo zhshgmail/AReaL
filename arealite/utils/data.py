@@ -63,23 +63,35 @@ def pad_sequences_to_tensors(
 ) -> TensorDict:
     if not sequence_list:
         return TensorDict()
-    max_length = max(len(seq) for item in sequence_list for seq in item.values())
+    skip_keys = {"pixel_values", "image_grid_thw"}
+    max_length = max(
+        len(seq)
+        for item in sequence_list
+        for key, seq in item.items()
+        if key not in skip_keys
+    )
     result = {}
     for key in sequence_list[0].keys():
         padded = []
+        if key in skip_keys:
+            result[key] = [sequence_list[i][key] for i in range(len(sequence_list))]
+            continue
         for item in sequence_list:
             x = item[key]
             if not torch.is_tensor(x):
                 x = torch.tensor(x)
-            padded.append(
-                torch.nn.functional.pad(
-                    x, (0, max_length - len(item[key])), value=pad_value
-                )
+            padded_x = torch.nn.functional.pad(
+                x, (0, max_length - len(item[key])), value=pad_value
             )
+            padded.append(padded_x)
         result[key] = torch.stack(padded)
     attention_mask = [
-        [1] * len(next(iter(item.values())))
-        + [0] * (max_length - len(next(iter(item.values()))))
+        [1] * len(next(iter(item[key] for key in item.keys() if key not in skip_keys)))
+        + [0]
+        * (
+            max_length
+            - len(next(iter(item[key] for key in item.keys() if key not in skip_keys)))
+        )
         for item in sequence_list
     ]
     result["attention_mask"] = torch.tensor(attention_mask, dtype=torch.bool)
@@ -121,9 +133,11 @@ def concat_padded_tensors(
     assert all("attention_mask" in td for td in tensor_dicts)
     max_length = max([x["attention_mask"].shape[1] for x in tensor_dicts])
     result = {}
+
     # Process each key
     for key in tensor_dicts[0].keys():
         tensors_to_concat = []
+
         for tensor_dict in tensor_dicts:
             tensor = tensor_dict[key]
             # Skip 1D tensors like rewards
@@ -131,6 +145,9 @@ def concat_padded_tensors(
                 tensors_to_concat.append(tensor)
                 continue
             current_length = tensor.shape[1]
+            if key == "pixel_values" or key == "image_grid_thw":
+                tensors_to_concat.append(tensor)
+                continue
             if current_length < max_length:
                 # Pad tensor to max_length
                 pad_width = max_length - current_length
@@ -139,11 +156,13 @@ def concat_padded_tensors(
                     padding = torch.zeros(
                         (tensor.shape[0], pad_width), dtype=tensor.dtype
                     )
+
                 else:
                     # Pad feature tensors with pad_value
                     padding = torch.full(
                         (tensor.shape[0], pad_width), pad_value, dtype=tensor.dtype
                     )
+
                 tensor = torch.cat([tensor, padding], dim=1)
             tensors_to_concat.append(tensor)
 
@@ -226,12 +245,14 @@ def pack_tensor_dict(data: TensorDict):
     total_length = int(cu_seqlens[-1].item())
     # Pack tensors
     packed_data = {}
+    packed_data["cu_seqlens"] = cu_seqlens
+    packed_data["max_seqlen"] = max_seqlen
     for key, value in data.items():
-        if key == "attention_mask":
-            packed_data["cu_seqlens"] = cu_seqlens
-            packed_data["max_seqlen"] = max_seqlen
-        # tensor and of shape [B, S, ...]
-        elif (
+        # if key == "attention_mask":
+        #     packed_data["cu_seqlens"] = cu_seqlens
+        #     packed_data["max_seqlen"] = max_seqlen
+        # # tensor and of shape [B, S, ...]
+        if (
             torch.is_tensor(value)
             and value.ndim >= 2
             and value.shape[0] == bs
@@ -310,6 +331,8 @@ def split_padded_tensor_dict_into_mb_list(
     to_split = {}
     not_to_split = {}
     for key, value in data.items():
+        if key == "image_grid_thw" or key == "pixel_values":
+            continue
         if not torch.is_tensor(value) or value.numel() != bs * max_seqlen:
             not_to_split[key] = value
         else:
@@ -343,6 +366,25 @@ def split_padded_tensor_dict_into_mb_list(
         return splitted
 
     to_split = dict_map(to_split, lambda x: _split(x))
+    if data.get("pixel_values", None) is not None:
+        pixel_values = data.get("pixel_values", [])
+        image_grid_thw = data.get("image_grid_thw", [])
+
+        # Prepare the pixel_values and image_grid_thw for each group
+        pixel_values_split = []
+        image_grid_thw_split = []
+
+        for group_index in group_indices:
+            group_pixel_values = [pixel_values[i] for i in group_index]
+            group_image_grid_thw = [image_grid_thw[i].squeeze() for i in group_index]
+
+            # Stack pixel_values for each group (assuming pixel_values is a list of tensors)
+            pixel_values_split.append(torch.stack(group_pixel_values))
+            image_grid_thw_split.append(torch.stack(group_image_grid_thw))
+
+        # Pack the split pixel_values and image_grid_thw back into the data
+        to_split["pixel_values"] = pixel_values_split
+        to_split["image_grid_thw"] = image_grid_thw_split
     mbs = dict_of_list2list_of_dict(to_split)
 
     results = []
@@ -447,7 +489,11 @@ def unsqueeze_packed_tensor_dict(data: TensorDict) -> TensorDict:
     new_data = {}
     for key, value in data.items():
         if (
-            key not in ["cu_seqlens", "max_seqlen"]
+            key
+            not in [
+                "cu_seqlens",
+                "max_seqlen",
+            ]
             and torch.is_tensor(value)
             and value.numel() == total_length
         ):

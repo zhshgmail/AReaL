@@ -11,7 +11,7 @@ from torch.distributed.checkpoint.state_dict import (
     StateDictOptions,
     get_model_state_dict,
 )
-from transformers import PreTrainedTokenizerFast
+from transformers import AutoProcessor, PreTrainedTokenizerFast
 
 from arealite.api.cli_args import TrainEngineConfig
 from arealite.api.engine_api import FinetuneSpec
@@ -27,6 +27,7 @@ from arealite.utils.fsdp import (
     fsdp2_load_full_state_dict,
 )
 from arealite.utils.save_load import get_state_dict_from_repo_id_or_path
+from realhf.api.core.data_api import load_hf_processor_and_tokenizer
 from realhf.base import logging, name_resolve, names, pkg_version
 
 logger = logging.getLogger("FSDPEngine")
@@ -77,7 +78,7 @@ class FSDPEngine(BaseHFEngine):
 
     def save(self, meta: SaveLoadMeta):
         if meta.weight_format == "hf":
-            self._save_model_to_hf(meta.path, meta.tokenizer)
+            self._save_model_to_hf(meta.path, meta.tokenizer, meta.processor)
         elif meta.weight_format == "dcp":
             # TODO: implement DCP save/load for FSDP
             raise NotImplementedError("DCP format saving is not implemented yet. ")
@@ -100,7 +101,10 @@ class FSDPEngine(BaseHFEngine):
             self.load_optimizer_state(meta.path)
 
     def _save_model_to_hf(
-        self, path: str, tokenizer: Optional[PreTrainedTokenizerFast]
+        self,
+        path: str,
+        tokenizer: Optional[PreTrainedTokenizerFast],
+        processor: Optional[AutoProcessor],
     ):
         """Save model in HuggingFace format."""
         if self.model is None:
@@ -119,6 +123,8 @@ class FSDPEngine(BaseHFEngine):
             self.model_config.save_pretrained(path)
             if tokenizer is not None:
                 tokenizer.save_pretrained(path)
+            if processor is not None:
+                processor.save_pretrained(path)
 
         dist.barrier(device_ids=[self.device.index])
 
@@ -144,13 +150,13 @@ class FSDPEngine(BaseHFEngine):
             dist.barrier(device_ids=[self.device.index])
             torch.cuda.synchronize()
         elif meta.type == "disk":
-            self._save_model_to_hf(meta.path, self.tokenizer)
+            self._save_model_to_hf(meta.path, self.tokenizer, self.processor)
             # dist.barrier() are called when _save_model_to_hf finished
             if dist.get_rank() == 0:
                 update_name = names.update_weights_from_disk(
                     self.config.experiment_name,
                     self.config.trial_name,
-                    self.model_version,
+                    self.get_version(),
                 )
                 name_resolve.add(
                     update_name, str(datetime.now().timestamp()), keepalive_ttl=120
@@ -247,9 +253,11 @@ class FSDPEngine(BaseHFEngine):
             loss.backward()
 
         # NOTE: grad norm clip function is different
+
         grad_norm = fsdp2_clip_grad_norm_(
             self.model.parameters(), max_norm=self.optimizer_config.gradient_clipping
         )
+
         if not torch.isfinite(grad_norm):
             self.optimizer.zero_grad()
             update_successful = False

@@ -52,7 +52,6 @@ def compute_packed_sft_loss(logits: torch.Tensor, input_: TensorDict) -> torch.T
     logprobs = torch.where(loss_mask, logprobs, 0)
 
     loss = -logprobs.sum() / loss_mask.count_nonzero()
-
     with torch.no_grad():
         seqlogp = torch.zeros(
             cu_seqlens.shape[0] - 1, device=logits.device, dtype=torch.float64

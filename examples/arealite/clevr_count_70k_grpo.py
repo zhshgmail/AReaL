@@ -1,8 +1,11 @@
 import os
+import re
 import sys
 
 import torch
 import torch.distributed as dist
+import wandb
+from torch.utils.data import Subset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from arealite.api.cli_args import GRPOConfig, load_expr_config
@@ -14,48 +17,74 @@ from arealite.utils.device import log_gpu_stats
 from arealite.utils.evaluator import Evaluator
 from arealite.utils.saver import Saver
 from arealite.utils.stats_logger import StatsLogger
-from arealite.workflow.rlvr import RLVRWorkflow
-from realhf.api.core.data_api import load_hf_tokenizer
-from realhf.base import logging, seeding, stats_tracker
-
-logger = logging.getLogger("GSM8K grpo")
+from arealite.workflow.vision_rlvr import VisionRLVRWorkflow
+from realhf.api.core.data_api import load_hf_processor_and_tokenizer
+from realhf.base import stats_tracker
 
 
-def gsm8k_reward_fn(prompt, completions, prompt_ids, completion_ids, answer, **kwargs):
-    from realhf.impl.dataset.math_parser import process_results
+def extract_answer(pred_str, data_name, use_last_number=True):
+    match = re.findall(r"\[([0-9\.]+)\]", pred_str)
+    if match:
+        return match[-1]
 
-    return int(process_results(completions, answer)[0])
+    return ""
+
+
+def clevr_count_70k_reward_fn(
+    prompt, completions, prompt_ids, completion_ids, answer, **kwargs
+):
+    sol = extract_answer(completions, data_name="")  # str number
+    ans = answer
+
+    if sol is None:
+        return 0
+    if ans is None:
+        return 0
+
+    if sol.strip() == ans.strip():
+        print(f"completions: {completions}, answer: {answer}")
+        return 1
+
+    return 0
 
 
 def main(args):
+
+    wandb.init(project="clevr_70k")
+
     config, _ = load_expr_config(args, GRPOConfig)
     config: GRPOConfig
 
     rank = int(os.getenv("RANK"))
     world_size = int(os.getenv("WORLD_SIZE"))
-    tokenizer = load_hf_tokenizer(config.tokenizer_path)
-
-    seeding.set_random_seed(config.seed, key=f"trainer{rank}")
+    processor, tokenizer = load_hf_processor_and_tokenizer(config.tokenizer_path)
     train_dataset = get_custom_dataset(
         path=config.train_dataset.path,
         rank=rank,
         world_size=world_size,
         split="train",
         type=config.train_dataset.type,
-        tokenizer=tokenizer,
+        processor=processor,
     )
+
+    train_size = len(train_dataset)
+    subset_size = int(1.0 * train_size)
+
+    random_indices = torch.randperm(train_size).tolist()[:subset_size]
+
+    subset_train_dataset = Subset(train_dataset, random_indices)
+
     valid_dataset = get_custom_dataset(
         path=config.valid_dataset.path,
         rank=rank,
         world_size=world_size,
         split="test",
         type=config.valid_dataset.type,
-        tokenizer=tokenizer,
+        processor=processor,
     )
-
     # Create dataset and dataloaders
     train_dataloader = StatefulDataLoader(
-        train_dataset,
+        subset_train_dataset,
         batch_size=config.train_dataset.batch_size // world_size,
         shuffle=config.train_dataset.shuffle,
         num_workers=config.train_dataset.num_workers,
@@ -96,11 +125,7 @@ def main(args):
     # but `WeightUpdateMeta.from_fsdp_nccl` has to be executed on all ranks
     # due to `engine.get_param_specs()`.
     # Therefore, we create weight update meta on all ranks, then broadcast the one on rank 0.
-    weight_update_meta = [
-        WeightUpdateMeta.from_fsdp_nccl(
-            AllocationMode.from_str(config.allocation_mode), actor
-        )
-    ]
+    weight_update_meta = [WeightUpdateMeta.from_disk(config.saver)]
     dist.broadcast_object_list(weight_update_meta, src=0)
     weight_update_meta = weight_update_meta[0]
 
@@ -109,14 +134,13 @@ def main(args):
         config.gconfig.stop_token_ids.append(tokenizer.pad_token_id)
     if tokenizer.eos_token_id not in config.gconfig.stop_token_ids:
         config.gconfig.stop_token_ids.append(tokenizer.eos_token_id)
-    workflow = RLVRWorkflow(
-        reward_fn=gsm8k_reward_fn,
+
+    workflow = VisionRLVRWorkflow(
+        reward_fn=clevr_count_70k_reward_fn,
         gconfig=config.gconfig,
         tokenizer=tokenizer,
+        processor=processor,
         enable_thinking=False,
-        dump_dir=os.path.join(
-            StatsLogger.get_log_path(config.stats_logger), "generated"
-        ),
     )
 
     # Run training.
@@ -159,6 +183,7 @@ def main(args):
         if ref is not None:
             with stats_tracker.record_timing("ref_logp"):
                 batch["ref_logp"] = ref.compute_logp(batch)
+
                 log_gpu_stats("ref logp")
 
         with stats_tracker.record_timing("compute_advantage"):
@@ -170,6 +195,8 @@ def main(args):
             stats_tracker.scope("grpo_actor"),
         ):
             stats = actor.ppo_update(batch)
+            wandb.log({"final_reward": stats[0]["grpo_actor/final_reward/avg"]})
+            wandb.log({"task_reward": stats[0]["grpo_actor/task_reward/avg"]})
             actor.step_lr_scheduler()
             log_gpu_stats("ppo update")
 
@@ -200,6 +227,7 @@ def main(args):
                         cnt += 1
                 batch = eval_rollout.wait(cnt, timeout=None)
                 rewards = batch["rewards"].float().to(actor.device)
+                wandb.log({"eval_reward": rewards.mean().item()})
                 with stats_tracker.scope("grpo-eval"):
                     stats_tracker.denominator(
                         n_seqs=torch.ones(
@@ -226,6 +254,7 @@ def main(args):
     if ref is not None:
         ref.destroy()
     actor.destroy()
+    wandb.finish()
 
 
 if __name__ == "__main__":

@@ -1,8 +1,6 @@
 import os
 import sys
 
-from datasets import Dataset, load_dataset
-from datasets.distributed import split_dataset_by_node
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from arealite.api.cli_args import SFTConfig, load_expr_config
@@ -13,18 +11,17 @@ from arealite.utils.data import pad_sequences_to_tensors
 from arealite.utils.evaluator import Evaluator
 from arealite.utils.saver import Saver
 from arealite.utils.stats_logger import StatsLogger
-from realhf.api.core.data_api import load_hf_tokenizer
+from realhf.api.core.data_api import load_hf_processor_and_tokenizer
 from realhf.base import stats_tracker
 
 
-def main(args):
-    config, _ = load_expr_config(args, SFTConfig)
+def main_sft():
+    config, _ = load_expr_config(sys.argv[1:], SFTConfig)
     config: SFTConfig
 
     rank = int(os.getenv("RANK"))
     world_size = int(os.getenv("WORLD_SIZE"))
-    tokenizer = load_hf_tokenizer(config.tokenizer_path)
-
+    processor, tokenizer = load_hf_processor_and_tokenizer(config.tokenizer_path)
     train_dataset = get_custom_dataset(
         path=config.train_dataset.path,
         rank=rank,
@@ -32,6 +29,7 @@ def main(args):
         split="train",
         type=config.train_dataset.type,
         tokenizer=tokenizer,
+        processor=processor,
     )
     valid_dataset = get_custom_dataset(
         path=config.valid_dataset.path,
@@ -40,6 +38,7 @@ def main(args):
         split="test",
         type=config.valid_dataset.type,
         tokenizer=tokenizer,
+        processor=processor,
     )
 
     # Create dataset and dataloaders
@@ -51,6 +50,7 @@ def main(args):
         collate_fn=pad_sequences_to_tensors,
         drop_last=config.train_dataset.drop_last,
     )
+
     valid_dataloader = StatefulDataLoader(
         valid_dataset,
         batch_size=config.valid_dataset.batch_size // world_size,
@@ -81,6 +81,7 @@ def main(args):
     global_step = 0
     for epoch in range(total_epochs):
         for step, data in enumerate(train_dataloader):
+
             with (
                 stats_tracker.record_timing("train_step"),
                 stats_tracker.scope("sft"),
@@ -120,4 +121,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main_sft()

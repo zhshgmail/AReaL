@@ -611,8 +611,15 @@ class ClusterSpecConfig:
 
 @dataclass
 class DatasetConfig:
+    path: str = field(
+        default=MISSING,
+        metadata={
+            "help": "Path to the dataset. Can be a local path or a HuggingFace dataset name."
+        },
+    )
     type: Optional[str] = field(
-        default=None, metadata={"help": "Type of implemented dataset"}
+        default=None,
+        metadata={"help": "Type of training method.e.g., 'sft', 'rl', etc."},
     )
     batch_size: int = field(
         default=1, metadata={"help": "Batch size of the dataloader"}
@@ -743,7 +750,7 @@ class BaseExperimentConfig:
     tokenizer_path: str = field(default="")
 
     train_dataset: DatasetConfig = field(default_factory=DatasetConfig)
-    valid_dataset: DatasetConfig = field(default_factory=DatasetConfig)
+    valid_dataset: Optional[DatasetConfig] = field(default=None)
 
     saver: SaverConfig = field(default_factory=SaverConfig)
     checkpointer: SaverConfig = field(default_factory=SaverConfig)

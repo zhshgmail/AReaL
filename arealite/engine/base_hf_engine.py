@@ -9,6 +9,8 @@ from tensordict import TensorDict
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
+    AutoProcessor,
     PretrainedConfig,
     PreTrainedTokenizerFast,
     get_constant_schedule_with_warmup,
@@ -29,8 +31,8 @@ from arealite.utils.data import (
     unsqueeze_mb_list,
 )
 from arealite.utils.fsdp import get_cosine_schedule_with_warmup
-from arealite.utils.model import disable_dropout_in_model
-from realhf.api.core.data_api import load_hf_tokenizer
+from arealite.utils.model import VALID_VISION_MODELS, disable_dropout_in_model
+from realhf.api.core.data_api import load_hf_processor_and_tokenizer, load_hf_tokenizer
 from realhf.base import constants, logging
 
 logger = logging.getLogger("Base HF Engine")
@@ -44,6 +46,7 @@ class BaseHFEngine(TrainEngine):
         self.model: torch.nn.Module
         self.optimizer: torch.optim.Optimizer
         self.tokenizer: PreTrainedTokenizerFast
+        self.processor: AutoProcessor | None = None
         # huggingface model config
         self.model_config: PretrainedConfig
         self._version: int = 0
@@ -53,6 +56,12 @@ class BaseHFEngine(TrainEngine):
         self.own_global_group = False
         self._parallelism_group: dist.ProcessGroup
         self.weight_update_group_initialized = False
+
+        self.model_config = AutoConfig.from_pretrained(
+            pretrained_model_name_or_path=self.config.path,
+            trust_remote_code=True,
+        )
+        self.is_vision_model = self.model_config.model_type in VALID_VISION_MODELS
 
         self.world_size = int(os.environ["WORLD_SIZE"])
 
@@ -92,32 +101,54 @@ class BaseHFEngine(TrainEngine):
         self.device = torch.device(int(os.environ["LOCAL_RANK"]))
 
         dtype = getattr(torch, self.config.dtype)
-        self.model_config = AutoConfig.from_pretrained(
-            pretrained_model_name_or_path=self.config.path,
-            trust_remote_code=True,
-        )
-        self.tokenizer = load_hf_tokenizer(self.config.path)
-        tik = time.perf_counter()
-        with torch.device("cuda"):
-            if self.config.init_from_scratch:
-                # initialize scratch model from config
-                # NOTE: VLM cannot directly load state dict using this
-                # random initialized model, so otherwise we call
-                # from_pretrained rather than loading weights into this random model.
-                model = AutoModelForCausalLM.from_config(
-                    self.model_config,
-                    torch_dtype=dtype,
-                    attn_implementation=self.config.attn_impl,
+
+        if self.is_vision_model:
+            if dtype == torch.float16:
+                raise ValueError(
+                    "Vision models do not support float16 dtype. Please use bfloat16."
                 )
-            else:
-                model = AutoModelForCausalLM.from_pretrained(
+            if self.config.init_from_scratch:
+                raise ValueError(
+                    "Vision models do not support initialization from scratch. Please use a pretrained model."
+                )
+            self.processor, self.tokenizer = load_hf_processor_and_tokenizer(
+                self.config.path
+            )
+
+            tik = time.perf_counter()
+            with torch.device("cuda"):
+                model = AutoModelForImageTextToText.from_pretrained(
                     pretrained_model_name_or_path=self.config.path,
                     trust_remote_code=True,
                     torch_dtype=dtype,
                     attn_implementation=self.config.attn_impl,
                 )
-            if self.config.disable_dropout:
-                disable_dropout_in_model(model)
+                if self.config.disable_dropout:
+                    disable_dropout_in_model(model)
+        else:
+            self.tokenizer = load_hf_tokenizer(self.config.path)
+            tik = time.perf_counter()
+            with torch.device("cuda"):
+                if self.config.init_from_scratch:
+                    # initialize scratch model from config
+                    # NOTE: VLM cannot directly load state dict using this
+                    # random initialized model, so otherwise we call
+                    # from_pretrained rather than loading weights into this random model.
+                    model = AutoModelForCausalLM.from_config(
+                        self.model_config,
+                        torch_dtype=dtype,
+                        attn_implementation=self.config.attn_impl,
+                    )
+                else:
+                    model = AutoModelForCausalLM.from_pretrained(
+                        pretrained_model_name_or_path=self.config.path,
+                        trust_remote_code=True,
+                        torch_dtype=dtype,
+                        attn_implementation=self.config.attn_impl,
+                    )
+                if self.config.disable_dropout:
+                    disable_dropout_in_model(model)
+
         if self.config.gradient_checkpointing:
             model.gradient_checkpointing_enable(
                 gradient_checkpointing_kwargs={"use_reentrant": False}
@@ -218,9 +249,15 @@ class BaseHFEngine(TrainEngine):
 
     def prepare_mb_list(self, input_: TensorDict) -> MicroBatchList:
         assert "attention_mask" in input_ and "input_ids" in input_
+        if self.is_vision_model:
+            assert (
+                "pixel_values" in input_ and "image_grid_thw" in input_
+            ), "For vision-language models, pixel_values and image_grid_thw must be present in input_"
+
         if isinstance(input_, dict):
             input_ = TensorDict(input_, batch_size=[input_["input_ids"].shape[0]])
         input_ = amend_position_ids(input_)
+
         mb_list = split_padded_tensor_dict_into_mb_list(input_, self.config.mb_spec)
         logger.info(
             f"Microbatch #tokens (rank {dist.get_rank()}): {mb_list.group_lens}"
@@ -230,6 +267,7 @@ class BaseHFEngine(TrainEngine):
         # NOTE: We unsqueeze here because huggingface transformer models requires
         # packed input to be of shape [1, total_seqlen].
         mb_list = unsqueeze_mb_list(mb_list)
+
         # FIXME: the resulting max_seqlen is a tensor rather than an integer
         for mb in mb_list.mbs:
             mb["max_seqlen"] = int(mb["max_seqlen"])
@@ -237,6 +275,7 @@ class BaseHFEngine(TrainEngine):
         for mb in mb_list.padded_mbs:
             mb["max_seqlen"] = int(mb["max_seqlen"])
             mb["use_cache"] = False
+
         return mb_list
 
     def train_batch(
@@ -264,11 +303,13 @@ class BaseHFEngine(TrainEngine):
         for i, (pad_length, padded_mb_input, mb_input) in enumerate(
             zip(mb_list.padding_lengths, mb_list.padded_mbs, mb_list.mbs)
         ):
+
             outputs = self.model(**padded_mb_input)
 
             logits = outputs.logits.squeeze(0)
             logits = logits[:-pad_length] if pad_length > 0 else logits
             loss = loss_fn(logits, mb_input)
+
             loss_scale = loss_weight_fn(mb_input) / total_loss_weight
 
             # Scale loss for accumulation
