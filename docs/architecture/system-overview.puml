@@ -1,0 +1,113 @@
+@startuml
+title AReaL System Architecture - Comprehensive Overview
+
+package "API Layer" {
+    [CLI Arguments] as cli
+    [System API] as sysapi
+    [Model API] as modelapi
+    [Data API] as dataapi
+    [Agent API] as agentapi
+    [Environment API] as envapi
+    [Quickstart] as quick
+}
+
+package "Model Implementation" {
+    [SGLang Backend] as sglang
+    [vLLM Backend] as vllm  
+    [Megatron Backend] as megatron
+    [ReaL LLM API] as realllm
+    [Neural Modules] as neural
+    [Parallelism Support] as parallel
+}
+
+package "Training System" {
+    [Model Worker] as modelworker
+    [Rollout Worker] as rolloutworker
+    [Generation Server] as genserver
+    [Controller] as controller
+    [Data Manager] as datamgr
+    [Buffer] as buffer
+    [Push/Pull Stream] as pushpull
+    [Worker Control] as workercontrol
+}
+
+package "Scheduler" {
+    [Scheduler Client] as schedclient
+    [Evaluator] as evaluator
+    [Local Scheduler] as localsched
+    [SLURM Scheduler] as slurmsch
+}
+
+package "Infrastructure" {
+    [Logging System] as logging
+    [Name Resolution] as nameresol
+    [Topology] as topology
+    [GPU Utils] as gpuutils
+    [Monitor] as monitor
+    [Network Utils] as network
+}
+
+package "Implementations" {
+    [Agent Implementations] as agents
+    [Dataset Implementations] as datasets
+    [Environment Implementations] as envs
+}
+
+package "Experiments" {
+    [Async RL Exp] as asyncrl
+    [Async PPO Math] as asyncppomath
+    [PPO Math Exp] as ppomath
+    [SFT Experiment] as sftexp
+}
+
+' Core asynchronous architecture relationships
+cli --> sysapi
+sysapi --> controller
+controller --> genserver : "Manage Generation"
+controller --> modelworker : "Manage Training"
+genserver --> rolloutworker : "Generation Tasks"
+rolloutworker --> sglang : "Model Inference"
+modelworker --> realllm : "Training Operations"
+
+' Asynchronous data flow
+rolloutworker --> pushpull : "Stream Rollouts"
+pushpull --> buffer : "Buffer Data"
+buffer --> datamgr : "Training Data"
+datamgr --> modelworker : "Training Batches"
+
+' Infrastructure integration
+nameresol --> controller : "Service Discovery"
+topology --> parallel : "Resource Layout"
+logging --> modelworker : "Training Monitoring"
+logging --> rolloutworker : "Generation Monitoring"
+monitor --> controller : "Performance Stats"
+network --> pushpull : "Network Communication"
+
+' Implementation layer integration
+agents --> rolloutworker : "Agent Behavior"
+datasets --> datamgr : "Data Sources"
+envs --> rolloutworker : "Environment Interaction"
+
+' Experiment orchestration
+asyncrl --> controller : "Experiment Control"
+asyncppomath --> asyncrl : "Specific Algorithm"
+schedclient --> controller : "Schedule Jobs"
+evaluator --> schedclient : "Evaluation Tasks"
+
+' Model backend integration
+sglang --> neural : "Neural Components"
+vllm --> neural : "Neural Components"
+megatron --> neural : "Neural Components"
+realllm --> neural : "Training Components"
+parallel --> modelworker : "Distributed Training"
+
+' Worker coordination
+controller --> workercontrol : "Worker Management"
+workercontrol --> modelworker : "Control Training"
+workercontrol --> rolloutworker : "Control Generation"
+
+note right of genserver : "Continuous generation\nwithout waiting for training\ncompletion"
+note right of modelworker : "Parallel training updates\nwith stale data handling\nusing decoupled PPO"
+note bottom of pushpull : "Asynchronous data streaming\nbetween generation and training\nfor maximum throughput"
+
+@enduml
