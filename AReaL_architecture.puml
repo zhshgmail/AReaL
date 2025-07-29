@@ -1,0 +1,92 @@
+@startuml AReaL系统高层功能视图
+!theme plain
+skinparam componentStyle uml2
+skinparam backgroundColor white
+skinparam defaultFontSize 12
+
+' 应用层 - 用户交互入口
+frame "应用层 (Application Layer)" as AppLayer {
+    component [CLI工具] as CLI <<用户命令行接口，提供快速启动和配置管理功能>>
+    component [主程序入口] as MainEntry <<系统主入口点，协调整个训练流程>>
+    component [快速启动工具] as QuickStart <<提供简化的实验启动接口>>
+}
+
+' API层 - 系统接口定义
+frame "API层 (API Layer)" as APILayer {
+    component [模型API] as ModelAPI <<定义模型接口，包括生成、训练、推理等核心功能>>
+    component [系统API] as SystemAPI <<定义系统配置和实验管理接口>>
+    component [数据API] as DataAPI <<定义数据集和数据处理接口>>
+    component [智能体API] as AgentAPI <<定义智能体行为和奖励函数接口>>
+    component [环境API] as EnvAPI <<定义强化学习环境接口>>
+    component [配置管理] as ConfigMgmt <<统一的配置管理和参数解析>>
+}
+
+' 调度层 - 资源管理和任务调度
+frame "调度层 (Scheduler Layer)" as SchedulerLayer {
+    component [本地调度器] as LocalScheduler <<在单机或本地集群上调度任务>>
+    component [Slurm调度器] as SlurmScheduler <<在Slurm集群环境中调度分布式任务>>
+    component [客户端接口] as SchedulerClient <<提供统一的调度客户端接口>>
+}
+
+' 系统层 - 核心分布式计算框架
+frame "系统层 (System Layer)" as SystemLayer {
+    component [主控节点] as MasterWorker <<协调整个训练过程，管理实验状态和监控>>
+    component [模型工作节点] as ModelWorker <<执行模型训练和参数更新>>
+    component [推理工作节点] as RolloutWorker <<执行模型推理和数据采样>>
+    component [生成服务器] as GenServer <<专门处理文本生成请求的异步服务>>
+    component [通信框架] as CommFramework <<处理节点间通信和数据流>>
+    component [数据缓冲区] as DataBuffer <<管理训练数据的异步缓冲和流式处理>>
+    component [控制器管理] as ControllerMgmt <<管理各种控制器和工作流协调>>
+}
+
+' 实现层 - 具体功能实现
+frame "实现层 (Implementation Layer)" as ImplLayer {
+    component [模型实现] as ModelImpl <<具体的模型架构实现，如Qwen、GPT等>>
+    component [数据集实现] as DatasetImpl <<各种数据集的具体实现和预处理>>
+    component [智能体实现] as AgentImpl <<智能体行为的具体实现>>
+    component [环境实现] as EnvImpl <<强化学习环境的具体实现>>
+    component [算法实现] as AlgoImpl <<PPO、GRPO等RL算法的具体实现>>
+    component [并行化实现] as ParallelImpl <<分布式并行计算的具体实现>>
+}
+
+' 训练层 - 训练算法和流程
+frame "训练层 (Training Layer)" as TrainingLayer {
+    component [异步PPO训练] as AsyncPPO <<异步PPO强化学习训练流程>>
+    component [同步PPO训练] as SyncPPO <<传统同步PPO训练流程>>
+    component [监督微调] as SFT <<监督学习微调流程>>
+    component [实验管理] as ExpMgmt <<实验配置和执行管理>>
+}
+
+' 评估层 - 模型评估和基准测试
+frame "评估层 (Evaluation Layer)" as EvalLayer {
+    component [数学推理评估] as MathEval <<数学问题求解能力评估>>
+    component [代码生成评估] as CodeEval <<编程任务完成能力评估>>
+    component [综合评估] as ComprehensiveEval <<多任务综合能力评估>>
+    component [基准测试] as Benchmark <<与其他系统的性能对比测试>>
+}
+
+' 定义层次间的依赖关系
+AppLayer ||--|| APILayer : "调用"
+APILayer ||--|| SchedulerLayer : "依赖"
+SchedulerLayer ||--|| SystemLayer : "调度"
+SystemLayer ||--|| ImplLayer : "使用"
+ImplLayer ||--|| TrainingLayer : "支持"
+TrainingLayer ||--|| EvalLayer : "产出模型用于"
+
+' 内部组件关系
+CLI --> MainEntry
+MainEntry --> QuickStart
+ModelAPI --> SystemAPI
+SystemAPI --> ConfigMgmt
+MasterWorker --> ModelWorker
+MasterWorker --> RolloutWorker
+MasterWorker --> GenServer
+ModelWorker --> CommFramework
+RolloutWorker --> DataBuffer
+GenServer --> ControllerMgmt
+
+' 跨层直接依赖关系 (虽然有层次但存在直接调用)
+note right of SystemLayer : 注意：系统层的某些组件\n可能直接调用API层接口，\n这是当前版本的设计特点
+note right of ImplLayer : 注意：实现层的组件\n会直接实现API层定义的接口，\n形成接口-实现的对应关系
+
+@enduml
