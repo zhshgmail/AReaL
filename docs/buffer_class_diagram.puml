@@ -1,0 +1,76 @@
+@startuml BufferClassDiagram
+
+!define RECTANGLE class
+
+class AsyncIOSequenceBuffer {
+    + rpcs: List<MFCDef>
+    + _lock: asyncio.Condition
+    + _is_being_put: ndarray
+    + _is_being_amended: ndarray  
+    + _is_being_read: ndarray
+    + _is_idle: ndarray
+    + _is_empty: ndarray
+    + _n_amenders: ndarray
+    + _n_readers: ndarray
+    + _ready_for_rpcs: ndarray
+    + _completed_rpc: ndarray
+    - __buffer: _TensorDictSequenceBuffer
+    
+    + __init__(rpcs, max_size)
+    + put_batch(samples, birth_times): async
+    + amend_batch(indices, samples): async
+    + get_batch_for_rpc(rpc): async
+    + _can_do_rpc(rpc): bool
+    + _assert_valid_indicator()
+    + put_batch_synced(samples)
+}
+
+class _TensorDictSequenceBuffer {
+    - __storage: List<_ReplayEntry>
+    - __has_keys: ndarray
+    - __keys: List<str>
+    - __reuses: int
+    
+    + __init__(keys, max_size, reuses)
+    + put_batch(indices, xs)
+    + amend_batch(indices, xs)
+    + get_batch(indices): List<_ReplayEntry>
+    + inspect_batch(indices): List<_ReplayEntry>
+    + pop_batch(indices)
+    + _update_has_keys(indices)
+    + _get_has_keys(indices)
+}
+
+class _ReplayEntry {
+    + reuses_left: int
+    + receive_time: float
+    + sample: SequenceSample
+}
+
+class SequenceSample {
+    + data: Dict
+    + seqlens: Dict
+    + keys: Set
+    + update_(other)
+    + gather(samples, keys): SequenceSample
+}
+
+class MFCDef {
+    + name: str
+    + n_seqs: int
+    + input_keys: Tuple
+    + output_keys: Tuple
+    + interface_type: ModelInterfaceType
+}
+
+class BufferFull {
+    <<Exception>>
+}
+
+AsyncIOSequenceBuffer *-- _TensorDictSequenceBuffer : contains
+_TensorDictSequenceBuffer o-- _ReplayEntry : stores
+_ReplayEntry *-- SequenceSample : contains
+AsyncIOSequenceBuffer --> MFCDef : uses
+AsyncIOSequenceBuffer ..> BufferFull : throws
+
+@enduml

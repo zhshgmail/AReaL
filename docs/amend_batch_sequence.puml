@@ -1,0 +1,34 @@
+@startuml AmendBatchSequence
+
+participant Client
+participant "AsyncIOSequenceBuffer" as Buffer
+participant "_TensorDictSequenceBuffer" as Internal
+participant "asyncio.Condition" as Lock
+
+Client -> Buffer: amend_batch(indices, samples)
+Buffer -> Lock: acquire()
+Buffer -> Lock: wait_for(indices idle or being_amended)
+Buffer -> Buffer: _assert_valid_indicator()
+Buffer -> Buffer: set _is_idle[indices] = False
+Buffer -> Buffer: set _is_being_amended[indices] = True
+Buffer -> Buffer: increment _n_amenders[indices]
+Buffer -> Lock: release()
+
+Buffer -> Internal: amend_batch(indices, samples)
+Internal -> Internal: update sample data
+
+Buffer -> Lock: acquire()
+Buffer -> Internal: _update_has_keys(indices)
+Buffer -> Buffer: update _ready_for_rpcs
+Buffer -> Buffer: decrement _n_amenders[indices]
+Buffer -> Buffer: update _is_being_amended[indices]
+Buffer -> Buffer: update _is_idle[indices]
+
+alt any indices become idle
+    Buffer -> Lock: notify(n_rpcs)
+end
+
+Buffer -> Lock: release()
+Buffer --> Client: complete
+
+@enduml

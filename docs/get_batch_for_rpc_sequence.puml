@@ -1,0 +1,51 @@
+@startuml GetBatchForRPCSequence
+
+participant "RPC Client" as RPC
+participant "AsyncIOSequenceBuffer" as Buffer
+participant "_TensorDictSequenceBuffer" as Internal
+participant "asyncio.Condition" as Lock
+
+RPC -> Buffer: get_batch_for_rpc(rpc)
+Buffer -> Lock: acquire()
+
+loop until can_do_rpc
+    Buffer -> Buffer: _can_do_rpc(rpc)
+    alt not ready
+        Buffer -> Lock: wait()
+    end
+end
+
+Buffer -> Buffer: _assert_valid_indicator()
+Buffer -> Buffer: find ready_indices for rpc
+Buffer -> Buffer: sort by birth_time (FIFO)
+Buffer -> Buffer: select n_seqs indices
+Buffer -> Buffer: set _is_idle[indices] = False
+Buffer -> Buffer: set _is_being_read[indices] = True
+Buffer -> Buffer: increment _n_readers[indices]
+Buffer -> Lock: release()
+
+Buffer -> Internal: get_batch(indices)
+Internal -> Internal: decrement reuses_left
+Internal -> Internal: identify entries with reuses_left = 0
+
+alt has entries to pop
+    Buffer -> Internal: pop_batch(pop_indices)
+    Internal -> Internal: clear storage and keys
+end
+
+Buffer -> Lock: acquire()
+Buffer -> Buffer: decrement _n_readers[indices]
+Buffer -> Buffer: update _is_being_read[indices]
+Buffer -> Buffer: update _is_idle[indices]
+Buffer -> Buffer: set _completed_rpc[indices, rpc_idx] = True
+Buffer -> Buffer: clean up popped indices
+Buffer -> Buffer: decrement _buf_size
+
+alt any indices become idle
+    Buffer -> Lock: notify(n_rpcs)
+end
+
+Buffer -> Lock: release()
+Buffer --> RPC: return (indices, SequenceSample)
+
+@enduml
