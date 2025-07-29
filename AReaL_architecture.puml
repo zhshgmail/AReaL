@@ -1,4 +1,4 @@
-@startuml AReaL系统高层功能视图
+@startuml
 !theme plain
 skinparam componentStyle uml2
 skinparam backgroundColor white
@@ -66,12 +66,12 @@ frame "评估层 (Evaluation Layer)" as EvalLayer {
 }
 
 ' 定义层次间的依赖关系
-AppLayer ||--|| APILayer : "调用"
-APILayer ||--|| SchedulerLayer : "依赖"
-SchedulerLayer ||--|| SystemLayer : "调度"
-SystemLayer ||--|| ImplLayer : "使用"
-ImplLayer ||--|| TrainingLayer : "支持"
-TrainingLayer ||--|| EvalLayer : "产出模型用于"
+AppLayer --> APILayer : "调用"
+APILayer --> SchedulerLayer : "依赖"
+SchedulerLayer --> SystemLayer : "调度"
+SystemLayer --> ImplLayer : "使用"
+ImplLayer --> TrainingLayer : "支持"
+TrainingLayer --> EvalLayer : "产出模型用于"
 
 ' 内部组件关系
 CLI --> MainEntry
@@ -88,5 +88,4 @@ GenServer --> ControllerMgmt
 ' 跨层直接依赖关系 (虽然有层次但存在直接调用)
 note right of SystemLayer : 注意：系统层的某些组件\n可能直接调用API层接口，\n这是当前版本的设计特点
 note right of ImplLayer : 注意：实现层的组件\n会直接实现API层定义的接口，\n形成接口-实现的对应关系
-
 @enduml
