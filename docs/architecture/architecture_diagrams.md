@@ -4,8 +4,8 @@ graph TB
         A1[Entry Point<br/>gsm8k_grpo.py] --> A2[Engine Objects]
         A2 --> A3[RemoteSGLangEngine]
         A2 --> A4[FSDPPPOActor]
-        A3 --> A5[rollout_batch()]
-        A4 --> A6[ppo_update()]
+        A3 --> A5["rollout_batch()"]
+        A4 --> A6["ppo_update()"]
         A5 --> A7[PyTorch/SGLang]
         A6 --> A7
         
