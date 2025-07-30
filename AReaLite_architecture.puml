@@ -1,0 +1,92 @@
+@startuml
+!theme plain
+skinparam componentStyle uml2
+skinparam backgroundColor white
+skinparam defaultFontSize 12
+
+' 应用层 - 用户入口和示例
+frame "应用层 (Application Layer)" as AppLayer {
+    component [示例脚本] as Examples <<提供GSM8K、CLEVR等具体任务的完整训练示例>>
+    component [配置管理] as ConfigMgmt <<统一的实验配置和参数管理>>
+    component [数据集接口] as DatasetInterface <<提供标准化的数据集加载和预处理接口>>
+}
+
+' 工作流层 - 强化学习数据收集工作流
+frame "工作流层 (Workflow Layer)" as WorkflowLayer {
+    component [RLVR工作流] as RLVRWorkflow <<强化学习价值排序工作流，支持多轮对话和奖励计算>>
+    component [多轮对话工作流] as MultiTurnWorkflow <<支持工具调用和多轮交互的对话工作流>>
+    component [视觉RLVR工作流] as VisionRLVRWorkflow <<支持视觉输入的强化学习工作流>>
+    component [工作流基类] as WorkflowBase <<定义工作流统一接口和数据流规范>>
+}
+
+' API层 - 抽象接口定义
+frame "API层 (API Layer)" as APILayer {
+    component [引擎API] as EngineAPI <<定义训练引擎和推理引擎的抽象接口>>
+    component [工作流API] as WorkflowAPI <<定义强化学习数据收集工作流的标准接口>>
+    component [环境API] as EnvAPI <<定义强化学习环境和奖励函数接口>>
+    component [IO结构] as IOStruct <<定义LLM请求、响应和元数据的标准数据结构>>
+    component [CLI参数] as CLIArgs <<定义命令行参数和配置数据类>>
+    component [奖励API] as RewardAPI <<定义奖励函数和评估指标的接口>>
+}
+
+' 引擎层 - 训练和推理引擎实现
+frame "引擎层 (Engine Layer)" as EngineLayer {
+    component [FSDP训练引擎] as FSDPEngine <<基于PyTorch FSDP2的分布式训练引擎>>
+    component [PPO算法引擎] as PPOActor <<PPO强化学习算法的具体实现>>
+    component [SGLang远程引擎] as SGLangRemote <<连接远程SGLang服务器的推理引擎>>
+    component [SFT训练引擎] as SFTEngine <<监督微调训练的语言模型引擎>>
+    component [HuggingFace基础引擎] as HFBaseEngine <<基于HuggingFace模型的基础训练引擎>>
+}
+
+' 启动器层 - 分布式部署和调度
+frame "启动器层 (Launcher Layer)" as LauncherLayer {
+    component [Ray启动器] as RayLauncher <<使用Ray框架进行多节点分布式任务调度>>
+    component [Slurm启动器] as SlurmLauncher <<在Slurm集群环境中启动分布式训练任务>>
+    component [本地启动器] as LocalLauncher <<单机或本地环境的任务启动管理>>
+    component [SGLang服务器] as SGLangServer <<管理SGLang推理服务器的生命周期>>
+}
+
+' 工具层 - 支持功能和工具
+frame "工具层 (Utils Layer)" as UtilsLayer {
+    component [分布式工具] as DistributedUtils <<分布式训练的通信和同步工具>>
+    component [设备管理] as DeviceMgmt <<GPU设备分配和内存管理>>
+    component [模型工具] as ModelUtils <<模型加载、保存和权重更新工具>>
+    component [数据工具] as DataUtils <<数据预处理、批处理和流式处理工具>>
+    component [评估器] as Evaluator <<模型性能评估和指标计算>>
+    component [统计日志] as StatsLogger <<训练过程统计信息和日志记录>>
+    component [保存器] as Saver <<模型检查点保存和恢复管理>>
+    component [网络工具] as NetworkUtils <<网络通信和HTTP服务相关工具>>
+}
+
+' 定义层次间的依赖关系
+AppLayer --> WorkflowLayer : "使用"
+WorkflowLayer --> APILayer : "实现"
+APILayer --> EngineLayer : "定义接口"
+EngineLayer --> LauncherLayer : "部署依赖"
+LauncherLayer --> UtilsLayer : "工具支持"
+
+' 内部组件关系
+Examples --> ConfigMgmt
+Examples --> DatasetInterface
+RLVRWorkflow --> WorkflowBase
+MultiTurnWorkflow --> WorkflowBase
+VisionRLVRWorkflow --> WorkflowBase
+EngineAPI --> IOStruct
+WorkflowAPI --> EngineAPI
+PPOActor --> FSDPEngine
+SFTEngine --> HFBaseEngine
+RayLauncher --> SGLangServer
+SlurmLauncher --> SGLangServer
+
+' 跨层直接依赖关系
+Examples ..> EngineLayer : "直接实例化"
+WorkflowLayer ..> EngineLayer : "引擎调用"
+EngineLayer ..> UtilsLayer : "工具调用"
+
+' 特殊说明
+note right of WorkflowLayer : 工作流层是AReaLite的核心创新，\\n提供灵活的RL数据收集模式
+note right of APILayer : API层实现接口与实现分离，\\n支持不同后端的灵活切换
+note right of EngineLayer : 引擎层支持SPMD模式，\\n对AI研究者更加友好
+note bottom of LauncherLayer : 启动器层支持多种部署环境，\\n从单机到大规模集群
+
+@enduml
