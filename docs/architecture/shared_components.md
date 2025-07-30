@@ -204,10 +204,10 @@ graph LR
 from realhf.base import stats_tracker
 
 # AReaLite中的使用
-def ppo_update(self, batch):
-    with stats_tracker.time("ppo_update"):
+def grpo_update(self, batch):
+    with stats_tracker.time("grpo_update"):
         loss = self.compute_loss(batch)
-        stats_tracker.register_scalar("ppo_loss", loss.item())
+        stats_tracker.register_scalar("grpo_loss", loss.item())
         return {"loss": loss}
 
 # Core中的使用  
@@ -247,13 +247,13 @@ classDiagram
 
 ### 4. 共享算法实现
 
-#### PPO算法核心函数
+#### GRPO算法核心函数
 
 ```python
-# 共享的PPO计算函数
+# 共享的算法计算函数 (文件命名仍为ppo_functional但AReaLite实现GRPO)
 from realhf.impl.model.utils import ppo_functional
 
-# AReaLite中的使用
+# AReaLite中的使用 (实际是GRPO算法)
 class FSDPPPOActor:
     def compute_advantages(self, batch):
         return ppo_functional.compute_gae(
@@ -263,7 +263,8 @@ class FSDPPPOActor:
             lam=self.config.lam
         )
     
-    def ppo_update(self, batch):
+    def grpo_update(self, batch):
+        # 注意：AReaLite实际使用GRPO算法，虽然调用相同的函数
         return ppo_functional.compute_ppo_loss(
             logprobs=batch["logprobs"],
             old_logprobs=batch["old_logprobs"],
@@ -271,7 +272,7 @@ class FSDPPPOActor:
             clip_ratio=self.config.clip_ratio
         )
 
-# Core中的使用
+# Core中的使用 (标准PPO算法)
 class PPOInterface:
     def train_step_interface(self, data, mb_spec):
         advantages = ppo_functional.compute_gae(...)
@@ -335,7 +336,7 @@ graph TB
     end
     
     subgraph "共享组件使用"
-        SHARED[ReaLModel<br/>Stats Tracker<br/>PPO Functions<br/>Math Verify]
+        SHARED[ReaLModel<br/>Stats Tracker<br/>RL算法函数<br/>Math Verify]
         
         A3 -.-> SHARED
         C4 -.-> SHARED

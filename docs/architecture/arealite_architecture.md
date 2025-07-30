@@ -22,7 +22,7 @@ graph TB
         end
         
         subgraph "3. 算法实现层"
-            ALG1[PPO Actor<br/>engine/ppo/actor.py]
+            ALG1[GRPO Actor<br/>engine/ppo/actor.py]
             ALG2[SFT Engine<br/>engine/sft/lm_engine.py]
             ALG3[RLVR Workflow<br/>workflow/rlvr.py]
             ALG4[Vision RLVR<br/>workflow/vision_rlvr.py]
@@ -101,7 +101,7 @@ graph TB
 
 1. **应用层 (Entry Points)**: 用户直接使用的训练脚本，组合下层组件实现完整的训练流程
 2. **API 抽象层**: 定义统一的接口规范，解耦各层之间的依赖关系
-3. **算法实现层**: 实现具体的RL算法(PPO)和工作流(RLVR)
+3. **算法实现层**: 实现具体的RL算法(GRPO)和工作流(RLVR)
 4. **引擎后端层**: 提供训练和推理的底层实现，对接第三方库
 5. **工具支撑层**: 提供通用的工具函数和实用程序
 6. **启动器层**: 管理分布式启动和资源分配
@@ -136,7 +136,7 @@ sequenceDiagram
     U->>R: 初始化推理引擎
     R->>S: 连接推理服务器
     
-    U->>A: 初始化PPO训练引擎
+    U->>A: 初始化GRPO训练引擎
     A->>F: 加载模型到FSDP
     
     U->>W: 创建RLVR工作流
@@ -150,7 +150,7 @@ sequenceDiagram
         W-->>R: 返回批次数据
         R-->>U: 返回训练批次
         
-        U->>A: ppo_update(batch)
+        U->>A: grpo_update(batch)
         A->>F: 前向传播计算损失
         F->>F: 反向传播更新权重
         F-->>A: 返回训练统计
@@ -358,7 +358,7 @@ classDiagram
     class FSDPPPOActor {
         +compute_logp(batch)
         +compute_advantages(batch)
-        +ppo_update(batch)
+        +grpo_update(batch)
         +upload_weights(meta)
         -_compute_policy_loss()
         -_compute_value_loss()
@@ -400,12 +400,12 @@ classDiagram
 
 ```mermaid
 sequenceDiagram
-    participant P as PPO算法
+    participant P as GRPO算法
     participant V as 价值函数
     participant R as 奖励计算
     participant L as 损失函数
     
-    Note over P,L: PPO算法内部流程
+    Note over P,L: GRPO算法内部流程
     
     P->>P: 接收rollout数据
     P->>V: 计算状态价值
@@ -415,7 +415,7 @@ sequenceDiagram
     R->>R: GAE计算
     R-->>P: 返回优势值
     
-    loop PPO更新循环
+    loop GRPO更新循环
         P->>L: 计算策略损失
         L->>L: clip目标函数
         L-->>P: 策略损失
@@ -595,3 +595,43 @@ sequenceDiagram
     T->>S: 连接推理服务器
     T->>T: 开始训练循环
 ```
+
+## 算法实现说明
+
+### GRPO vs PPO
+
+**重要声明**: AReaLite实际实现的是**GRPO (Group Relative Policy Optimization)**算法，而不是标准的PPO算法，这是一个关键的技术细节：
+
+#### GRPO算法特点
+- **Group-based设计**: 支持group_size配置，对多个样本进行分组优化
+- **GRPO损失函数**: 使用专门的`grpo_loss_fn`函数 (位于`arealite/engine/ppo/actor.py`第286行)
+- **配置差异**: 包含group_reward_norm、group_adv_norm等GRPO特有参数
+
+#### 代码实现证据
+```python
+# 文件：arealite/engine/ppo/actor.py
+def grpo_loss_fn(
+    logits: torch.Tensor,
+    input_data: Dict,
+    temperature: float,
+    eps_clip: float,
+    c_clip: float | None,
+    behav_imp_weight_cap: float | None,
+):
+    """GRPO算法的实际损失函数实现"""
+    
+# 文件：arealite/api/cli_args.py  
+class GRPOConfig:
+    """GRPO专用配置类"""
+```
+
+#### 为什么存在命名混淆
+1. **历史原因**: 代码中的类名`PPOActor`和文件路径`engine/ppo/`保持了早期PPO实现的命名
+2. **兼容性**: 保持了与Core系统中PPO接口的兼容性
+3. **实际算法**: 尽管命名为PPO相关，但AReaLite实际执行的是GRPO算法逻辑
+
+#### 示例文件确认
+- `examples/arealite/gsm8k_grpo.py` - GSM8K的GRPO训练示例
+- `examples/arealite/clevr_count_70k_grpo.py` - CLEVR的GRPO训练示例
+
+这种设计确保了AReaLite在保持简单易用的同时，提供了比标准PPO更适合群组优化的GRPO算法实现。

@@ -13,7 +13,7 @@ graph TB
         A2 --> A3[RemoteSGLangEngine]
         A2 --> A4[FSDPPPOActor]
         A3 --> A5["rollout_batch()"]
-        A4 --> A6["ppo_update()"]
+        A4 --> A6["grpo_update()"]
         A5 --> A7[PyTorch/SGLang]
         A6 --> A7
         
@@ -62,7 +62,7 @@ graph TB
         end
         
         subgraph "算法层"
-            AL3[PPO Actor<br/>SFT Engine<br/>RLVR Workflow]
+            AL3[GRPO Actor<br/>SFT Engine<br/>RLVR Workflow]
         end
         
         subgraph "引擎层"
@@ -163,7 +163,7 @@ graph TB
     subgraph "共享组件"
         SHARED1[ReaLModel<br/>模型实现]
         SHARED2[Stats Tracker<br/>统计追踪]
-        SHARED3[PPO Functions<br/>算法函数]
+        SHARED3[RL算法函数<br/>算法函数]
         SHARED4[Math Verify<br/>数学验证]
         SHARED5[HF Registry<br/>模型转换]
         
@@ -288,7 +288,7 @@ sequenceDiagram
         AL->>E: rollout_batch()
         E->>PT: 直接调用
         PT-->>E: 返回结果
-        AL->>E: ppo_update()
+        AL->>E: grpo_update()
         E->>PT: 直接调用
         PT-->>E: 返回结果
     end
