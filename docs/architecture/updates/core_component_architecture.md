@@ -237,7 +237,7 @@ classDiagram
     ModelWorker --> ReaLModel : 包含模型实例
     PPOInterface --> ReaLModel : 操作模型
     
-    note for ModelWorker : "训练节点\n执行模型训练和推理"
+    note for ModelWorker  "训练节点\n执行模型训练和推理"
 ```
 
 ### 3. Rollout Worker (数据收集节点)
@@ -293,7 +293,7 @@ classDiagram
     RolloutWorker --> Environment : 交互环境
     RolloutWorker --> RewardFunction : 使用奖励函数
     
-    note for RolloutWorker : "数据收集节点\n生成训练数据"
+    note for RolloutWorker  "数据收集节点\n生成训练数据"
 ```
 
 ### 4. Generation Manager & Servers
@@ -349,7 +349,7 @@ classDiagram
     GenerationManager --> LoadBalancer : 使用负载均衡
     GenerationServer --> ReaLModel : 包含生成模型
     
-    note for GenerationManager : "生成服务管理器\n协调多个推理服务器"
+    note for GenerationManager  "生成服务管理器\n协调多个推理服务器"
 ```
 
 ## 数据流架构
@@ -517,7 +517,7 @@ classDiagram
     FunctionExecutor --> ExecutionGraph : 使用执行图
     FunctionExecutor --> BufferManager : 使用缓冲管理
     
-    note for FunctionExecutor : "MFC执行引擎\n协调分布式函数调用"
+    note for FunctionExecutor "MFC执行引擎\n协调分布式函数调用"
 ```
 
 ### MFC通信协议
