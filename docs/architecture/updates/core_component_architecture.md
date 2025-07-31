@@ -184,7 +184,7 @@ classDiagram
     MasterWorker --> WorkerInfo : 管理多个
     MasterWorker --> TaskScheduler : 使用
     
-    note for MasterWorker : "全局协调器\n管理整个分布式系统"
+    note for MasterWorker : "全局协调器，管理整个分布式系统"
 ```
 
 ### 2. Model Worker (训练节点)
