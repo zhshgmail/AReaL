@@ -7,7 +7,7 @@
 ```mermaid
 graph TB
     subgraph "AReaLite 系统层次架构"
-        subgraph "1. 应用层 (Entry Points)"
+        subgraph "1.应用层 (Entry Points)"
             APP1[gsm8k_grpo.py]
             APP2[gsm8k_sft.py] 
             APP3[clevr_count_70k_grpo.py]
