@@ -14,40 +14,40 @@ graph TB
             APP4[clevr_count_70k_sft.py]
         end
         
-        subgraph "2. API 抽象层"
+        subgraph "2.API 抽象层"
             API1[Engine API<br/>engine_api.py]
             API2[Workflow API<br/>workflow_api.py]
             API3[CLI Args<br/>cli_args.py]
             API4[IO Struct<br/>io_struct.py]
         end
         
-        subgraph "3. 算法实现层"
+        subgraph "3.算法实现层"
             ALG1[GRPO Actor<br/>engine/ppo/actor.py]
             ALG2[SFT Engine<br/>engine/sft/lm_engine.py]
             ALG3[RLVR Workflow<br/>workflow/rlvr.py]
             ALG4[Vision RLVR<br/>workflow/vision_rlvr.py]
         end
         
-        subgraph "4. 引擎后端层"
+        subgraph "4.引擎后端层"
             ENG1[FSDP Engine<br/>engine/fsdp_engine.py]
             ENG2[Base HF Engine<br/>engine/base_hf_engine.py]
             ENG3[SGLang Remote<br/>engine/sglang_remote.py]
         end
         
-        subgraph "5. 工具支撑层"
+        subgraph "5.工具支撑层"
             UTIL1[数据处理<br/>utils/data.py]
             UTIL2[分布式工具<br/>utils/distributed.py]
             UTIL3[FSDP工具<br/>utils/fsdp.py]
             UTIL4[保存加载<br/>utils/save_load.py]
         end
         
-        subgraph "6. 启动器层"
+        subgraph "6.启动器层"
             LAUNCH1[Local Launcher<br/>launcher/local.py]
             LAUNCH2[Ray Launcher<br/>launcher/ray.py]
             LAUNCH3[Slurm Launcher<br/>launcher/slurm.py]
         end
         
-        subgraph "7. 基础依赖层"
+        subgraph "7.基础依赖层"
             DEP1[PyTorch FSDP]
             DEP2[SGLang]
             DEP3[HuggingFace]
