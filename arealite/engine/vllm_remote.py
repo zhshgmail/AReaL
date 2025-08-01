@@ -277,16 +277,32 @@ class RemotevLLMEngine(InferenceEngine):
 
         # Parse response
         meta_info = result["choices"][0]
+        vllm_tokens = meta_info["logprobs"]["tokens"]
         output_tokens_before = meta_info['text']
-        output_tokens = tokenizer.encode(output_tokens_before)
+        output_tokens = tokenizer.convert_tokens_to_ids(vllm_tokens)
+        output_logprobs = meta_info["logprobs"]["token_logprobs"]
 
-        output_logprobs = meta_info['logprobs']['token_logprobs'][:len(output_tokens)] #FIXME logprobs 和output tokens长度不一致
 
         # Update accumulated outputs
         accumulated_output_tokens.extend(output_tokens)
         accumulated_output_logprobs.extend(output_logprobs)
         # FIXME: Update with actual server versions
         accumulated_versions.extend([-1] * len(output_tokens))
+       # logger.warning(f"[LEN-CHK] {(len(output_tokens) - len(req.input_ids)) == len(output_logprobs)} "
+         #      f"(tokens={len(output_tokens)}, prompt={len(req.input_ids)}, lps={len(output_logprobs)})")
+
+       # logger.warning(f"[PFX-CHK] {output_tokens[:len(req.input_ids)] == req.input_ids} "
+        #       f"(first 5 ids: {output_tokens[:5]} vs {req.input_ids[:5]})")
+       # logger.warn(f"accumulated_output_tokens: {accumulated_output_tokens}")
+       # logger.warn(f"accumulated_output_logprobs: {accumulated_output_logprobs}")
+       # logger.warn(f"output_tokens_before: {output_tokens_before}")
+       # logger.warn(f"vllm_tokens: {vllm_tokens}")
+       # logger.warn(f"output_tokens: {output_tokens}")
+       # logger.warn(f"output_logprobs: {output_logprobs}")
+       # logger.error(f"len(vllm_tokens): {len(vllm_tokens)}")
+       # logger.error(f"len(output_tokens): {len(output_tokens)}")
+       # logger.error(f"len(output_logprobs): {len(output_logprobs)}")
+        
 
         # Check if generation is complete
         stop_reason = meta_info["finish_reason"]

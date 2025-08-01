@@ -116,7 +116,6 @@ class FSDPEngine(BaseHFEngine):
             self.model_config.save_pretrained(path)
             if tokenizer is not None:
                 tokenizer.save_pretrained(path)
-
         dist.barrier()
 
     def _load_model_from_hf(self, path: str):
