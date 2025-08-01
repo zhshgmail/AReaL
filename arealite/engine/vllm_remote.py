@@ -9,6 +9,7 @@ from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from queue import Empty, Full, Queue
 from typing import TYPE_CHECKING, Any, Callable, Dict, List
+import transformers
 
 import aiohttp
 import requests
@@ -223,7 +224,7 @@ class RemotevLLMEngine(InferenceEngine):
                 return server
         raise NotImplementedError("Only round-robin scheduling is implemented.")
 
-    async def agenerate(self, req: LLMRequest, tokenizer) -> LLMResponse:
+    async def agenerate(self, req: LLMRequest, tokenizer: transformers.PreTrainedTokenizerFast) -> LLMResponse:
         """Async version of generate using aiohttp."""
         # Prepare request payload
         gconfig = req.gconfig
@@ -233,6 +234,15 @@ class RemotevLLMEngine(InferenceEngine):
                 "RemotevLLMEngine does not support n_samples > 1. "
                 "Please call generate for multiple times with n_samples = 1."
             )
+        
+        stop_tokens = []
+        
+        if tokenizer.pad_token not in stop_tokens:
+            stop_tokens.append(tokenizer.pad_token)
+        if tokenizer.eos_token_id not in stop_tokens:
+            stop_tokens.append(tokenizer.eos_token_id)
+
+        logger.warning(f"Stop tokens: {stop_tokens}")
 
         # NOTE: rid should NOT be passed in payload
         payload = {
@@ -243,6 +253,7 @@ class RemotevLLMEngine(InferenceEngine):
             "temperature": 0.0 if gconfig.greedy else gconfig.temperature,
             "logprobs": 0,
             "stream": False,
+            "stop": stop_tokens
         }
 
         # Make request
@@ -265,49 +276,54 @@ class RemotevLLMEngine(InferenceEngine):
             self.rid_to_address[req.rid] = server_addr
             self.rid_queue.append(req.rid)
 
-        result = await arequest_with_retry(
-            session=self.session,
-            addr=server_addr,
-            endpoint="/v1/completions",
-            payload=payload,
-            method="POST",
-            max_retries=self.config.request_retries,
-            timeout=self.config.request_timeout,
-        )
+        while (
+            stop_reason != "stop"
+            and len(accumulated_output_tokens) < gconfig.max_new_tokens
+        ):
+            result = await arequest_with_retry(
+                session=self.session,
+                addr=server_addr,
+                endpoint="/v1/completions",
+                payload=payload,
+                method="POST",
+                max_retries=self.config.request_retries,
+                timeout=self.config.request_timeout,
+            )
 
-        # Parse response
-        meta_info = result["choices"][0]
-        vllm_tokens = meta_info["logprobs"]["tokens"]
-        output_tokens_before = meta_info['text']
-        output_tokens = tokenizer.convert_tokens_to_ids(vllm_tokens)
-        output_logprobs = meta_info["logprobs"]["token_logprobs"]
+            # Parse response
+            meta_info = result["choices"][0]
+            vllm_tokens = meta_info["logprobs"]["tokens"]
+            output_tokens_before = meta_info['text']
+            output_tokens = tokenizer.convert_tokens_to_ids(vllm_tokens)
+            output_logprobs = meta_info["logprobs"]["token_logprobs"]
 
 
-        # Update accumulated outputs
-        accumulated_output_tokens.extend(output_tokens)
-        accumulated_output_logprobs.extend(output_logprobs)
-        # FIXME: Update with actual server versions
-        accumulated_versions.extend([-1] * len(output_tokens))
-       # logger.warning(f"[LEN-CHK] {(len(output_tokens) - len(req.input_ids)) == len(output_logprobs)} "
-         #      f"(tokens={len(output_tokens)}, prompt={len(req.input_ids)}, lps={len(output_logprobs)})")
+            # Update accumulated outputs
+            accumulated_output_tokens.extend(output_tokens)
+            accumulated_output_logprobs.extend(output_logprobs)
+            # FIXME: Update with actual server versions
+            accumulated_versions.extend([-1] * len(output_tokens))
+            # logger.warning(f"[LEN-CHK] {(len(output_tokens) - len(req.input_ids)) == len(output_logprobs)} "
+                #      f"(tokens={len(output_tokens)}, prompt={len(req.input_ids)}, lps={len(output_logprobs)})")
 
-       # logger.warning(f"[PFX-CHK] {output_tokens[:len(req.input_ids)] == req.input_ids} "
-        #       f"(first 5 ids: {output_tokens[:5]} vs {req.input_ids[:5]})")
-       # logger.warn(f"accumulated_output_tokens: {accumulated_output_tokens}")
-       # logger.warn(f"accumulated_output_logprobs: {accumulated_output_logprobs}")
-       # logger.warn(f"output_tokens_before: {output_tokens_before}")
-       # logger.warn(f"vllm_tokens: {vllm_tokens}")
-       # logger.warn(f"output_tokens: {output_tokens}")
-       # logger.warn(f"output_logprobs: {output_logprobs}")
-       # logger.error(f"len(vllm_tokens): {len(vllm_tokens)}")
-       # logger.error(f"len(output_tokens): {len(output_tokens)}")
-       # logger.error(f"len(output_logprobs): {len(output_logprobs)}")
-        
+            # logger.warning(f"[PFX-CHK] {output_tokens[:len(req.input_ids)] == req.input_ids} "
+                #       f"(first 5 ids: {output_tokens[:5]} vs {req.input_ids[:5]})")
+            # logger.warn(f"accumulated_output_tokens: {accumulated_output_tokens}")
+            # logger.warn(f"accumulated_output_logprobs: {accumulated_output_logprobs}")
+            # logger.warn(f"output_tokens_before: {output_tokens_before}")
+            # logger.warn(f"vllm_tokens: {vllm_tokens}")
+            # logger.warn(f"output_tokens: {output_tokens}")
+            # logger.warn(f"output_logprobs: {output_logprobs}")
+            # logger.error(f"len(vllm_tokens): {len(vllm_tokens)}")
+            # logger.error(f"len(output_tokens): {len(output_tokens)}")
+            # logger.error(f"len(output_logprobs): {len(output_logprobs)}")
 
-        # Check if generation is complete
-        stop_reason = meta_info["finish_reason"]
+            # Check if generation is complete
+            stop_reason = meta_info["finish_reason"]
 
         latency = time.perf_counter() - start_time
+
+        logger.warning(f"Lengh of accumulated_output_tokens: {len(accumulated_output_tokens)}")
 
         return LLMResponse(
             input_tokens=req.input_ids,

@@ -40,7 +40,7 @@ actor:
   gradient_checkpointing: false
   dtype: bfloat16
   mb_spec:
-    max_tokens_per_mb: 10240
+    max_tokens_per_mb: 4096
   optimizer:
     type: adam
     lr: 2e-6
@@ -92,19 +92,19 @@ vllm:
   seed: ${seed}
   skip_tokenizer_init: true
   dtype: ${actor.dtype}
-  max_model_len: 32768
-  gpu_memory_utilization: 0.95
+  max_model_len: 8192
+  gpu_memory_utilization: 0.9
   disable_sliding_window: true
 #  disable_log_requests: true
 
 # datasets
 train_dataset:
-  batch_size: 256
+  batch_size: 128
   shuffle: true
   pin_memory: true
 
 valid_dataset:
-  batch_size: 256
+  batch_size: 128
   shuffle: true
   pin_memory: true
 
