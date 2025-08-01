@@ -28,6 +28,20 @@ def gsm8k_reward_fn(prompt, completions, prompt_ids, completion_ids, answer, **k
 
 
 def main(args):
+    """
+    Main GRPO training function for GSM8K dataset.
+    
+    Important: This training script expects SGLang inference servers to be 
+    ALREADY RUNNING before this script starts. The servers are launched by 
+    the AReaL launcher (e.g., arealite.launcher.local) which:
+    
+    1. First starts SGLang servers based on allocation_mode config
+    2. Waits for servers to be ready and healthy  
+    3. Sets AREAL_LLM_SERVER_ADDRS environment variable
+    4. Then starts this training script
+    
+    This script connects to the pre-existing servers via RemoteSGLangEngine.
+    """
     config, _ = load_expr_config(args, GRPOConfig)
     config: GRPOConfig
 
@@ -77,12 +91,25 @@ def main(args):
     )
 
     # Initialize inference engine
+    # NOTE: SGLang servers must already be running at this point.
+    # They are started by the launcher before this training script begins.
+    logger.info("Connecting to pre-existing SGLang inference servers...")
+    server_addrs = os.getenv("AREAL_LLM_SERVER_ADDRS", "").split(",")
+    if not server_addrs or server_addrs == [""]:
+        raise RuntimeError(
+            "No SGLang server addresses found in AREAL_LLM_SERVER_ADDRS. "
+            "SGLang servers must be started before this training script runs. "
+            "Use the AReaL launcher (e.g., python -m arealite.launcher.local) to start servers first."
+        )
+    logger.info(f"Found SGLang servers at: {server_addrs}")
+    
     rollout = RemoteSGLangEngine(config.rollout)
     rollout.initialize(None, ft_spec)
     eval_rollout = RemoteSGLangEngine(config.rollout)
     eval_rollout.initialize(None, ft_spec)
     # NOTE: set a large version such that eval does not have any offpolicyness control
     eval_rollout.set_version(int(1e12))
+    logger.info("Successfully connected to SGLang inference servers")
 
     # Initialize train engine
     actor = FSDPPPOActor(config=config.actor)

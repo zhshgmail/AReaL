@@ -6,6 +6,31 @@ the training script
 configuration file
 [examples/arealite/configs/gsm8k_grpo.yaml](../../examples/arealite/configs/gsm8k_grpo.yaml).
 
+## SGLang Server Startup Timing
+
+**Key Question**: When does the SGLang server get started if GRPO training process is triggered by `examples/arealite/gsm8k_grpo.py`?
+
+**Answer**: SGLang servers are started **BEFORE** the GRPO training script begins execution.
+
+### Startup Sequence:
+
+1. **Launcher Invocation**: 
+   ```bash
+   python -m arealite.launcher.local examples/arealite/gsm8k_grpo.py --config examples/arealite/configs/gsm8k_grpo.yaml
+   ```
+
+2. **SGLang Servers Start First**: The launcher starts SGLang inference servers based on the `allocation_mode` configuration
+
+3. **Server Readiness**: Launcher waits for all SGLang servers to be healthy and ready
+
+4. **Environment Setup**: Server addresses are set in `AREAL_LLM_SERVER_ADDRS` environment variable
+
+5. **Training Script Launch**: Only then is `gsm8k_grpo.py` started with the server addresses
+
+6. **Connection**: The training script connects to the pre-existing SGLang servers via `RemoteSGLangEngine`
+
+This design enables AReaL's asynchronous RL training where inference and training are decoupled.
+
 ## How AReaLite Works
 
 The following figure illustrates the launching and one asynchronous training step of the
@@ -40,6 +65,26 @@ python -m arealite.launcher.ray <training script> --config <configuration file> 
 # Slurm Launcher
 python -m arealite.launcher.slurm <training script> --config <configuration file> <cli args>
 ```
+
+### SGLang Server Startup Sequence
+
+**IMPORTANT**: Understanding the startup timing is crucial for GRPO training:
+
+1. **SGLang Servers Start FIRST**: The launcher starts SGLang inference servers before 
+   the training script begins execution
+2. **Server Readiness Check**: The launcher waits for all SGLang servers to be ready 
+   and responding to health checks
+3. **Environment Setup**: Server addresses are collected and passed to the training 
+   script via the `AREAL_LLM_SERVER_ADDRS` environment variable
+4. **Training Script Launch**: Only after servers are ready, the training script 
+   (e.g., `gsm8k_grpo.py`) is started
+5. **Connection**: The training script connects to the pre-existing SGLang servers 
+   via `RemoteSGLangEngine`
+
+This sequence ensures that when the GRPO training process begins, the SGLang servers 
+are already running and ready to handle inference requests.
+
+### Architecture Details
 
 In AReaLite:
 
