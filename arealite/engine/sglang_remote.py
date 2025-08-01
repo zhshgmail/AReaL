@@ -44,6 +44,17 @@ RID_CACHE_SIZE = 128
 class RemoteSGLangEngine(InferenceEngine):
 
     def __init__(self, config: InferenceEngineConfig):
+        """
+        Initialize RemoteSGLangEngine that connects to pre-existing SGLang servers.
+        
+        IMPORTANT: This class expects SGLang servers to be ALREADY RUNNING.
+        In the AReaL training pipeline:
+        1. Launcher starts SGLang servers first
+        2. Launcher waits for servers to be ready
+        3. Launcher starts training script with server addresses in AREAL_LLM_SERVER_ADDRS
+        4. Training script creates RemoteSGLangEngine instances (this class)
+        5. This class connects to the pre-existing servers
+        """
         config.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
         )
@@ -55,11 +66,16 @@ class RemoteSGLangEngine(InferenceEngine):
 
         self.addresses = os.getenv("AREAL_LLM_SERVER_ADDRS").split(",")
         if not self.addresses:
-            raise RuntimeError("No configured SGLang servers.")
+            raise RuntimeError(
+                "No configured SGLang servers found in AREAL_LLM_SERVER_ADDRS. "
+                "SGLang servers must be started before creating RemoteSGLangEngine. "
+                "Use the AReaL launcher to start servers first."
+            )
+        logger.info(f"RemoteSGLangEngine connecting to {len(self.addresses)} pre-existing SGLang servers...")
         logger.info("Waiting for server ready...")
         for addr in self.addresses:
             self._wait_for_server(addr)
-        logger.info("Servers are all ready!")
+        logger.info("All SGLang servers are ready and connected!")
 
         self.server_idx = random.randint(0, len(self.addresses) - 1)
 

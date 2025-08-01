@@ -268,6 +268,11 @@ def main_local():
         raise NotImplementedError()
 
     # Launch inference servers.
+    logger.info("=" * 60)
+    logger.info("STARTUP SEQUENCE: Starting SGLang inference servers FIRST")
+    logger.info("=" * 60)
+    logger.info(f"Launching {alloc_mode.gen_dp_size} SGLang server(s) with {alloc_mode.gen_tp_size} tensor parallel size each")
+    
     launcher.submit_array(
         job_name="llm_server",
         cmd=server_cmd,
@@ -275,17 +280,29 @@ def main_local():
         gpu=alloc_mode.gen_pp_size * alloc_mode.gen_tp_size,
     )
     logger.info(
-        f"LLM inference server launched at: AREAL_LLM_SERVER_ADDRS={','.join(server_addrs)}"
+        f"SGLang inference servers launched at: AREAL_LLM_SERVER_ADDRS={','.join(server_addrs)}"
     )
+    logger.info("Waiting for SGLang servers to be ready before starting training...")
+    
+    # Give servers some time to start up before launching training
+    # The RemoteSGLangEngine will also do health checks, but this provides clearer logging
+    time.sleep(2)
+    logger.info("SGLang servers startup initiated. Training script will verify server readiness.")
 
     # Launch trainer entrypoint
     if not cfg.server_only:
+        logger.info("=" * 60)
+        logger.info("STARTUP SEQUENCE: Now starting training script")
+        logger.info("=" * 60)
+        logger.info("Training script will connect to the SGLang servers that were just started")
+        
         launcher.submit(
             job_name="trainer",
             cmd=f"torchrun --nnodes 1 --nproc-per-node {alloc_mode.train_world_size} --master-addr localhost --master-port {find_free_ports(1, (10000, 50000))[0]} {' '.join(sys.argv[1:])}",
             gpu=alloc_mode.train_world_size,
             env_vars=dict(AREAL_LLM_SERVER_ADDRS=",".join(server_addrs)),
         )
+        logger.info("Training script launched with SGLang server addresses in environment")
 
     try:
         launcher.wait(
