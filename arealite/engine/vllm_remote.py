@@ -227,6 +227,7 @@ class RemotevLLMEngine(InferenceEngine):
         """Async version of generate using aiohttp."""
         # Prepare request payload
         gconfig = req.gconfig
+        stop_token_ids = gconfig.stop_token_ids
 
         if gconfig.n_samples != 1:
             raise ValueError(
@@ -234,7 +235,12 @@ class RemotevLLMEngine(InferenceEngine):
                 "Please call generate for multiple times with n_samples = 1."
             )
 
-        # NOTE: rid should NOT be passed in payload
+        # Convert stop_token_ids to strings if provided
+        stop_sequences = None
+        if stop_token_ids:
+            stop_sequences = [tokenizer.decode([token_id]) for token_id in stop_token_ids]
+
+        # NOTE: rid should NOT be passed in payload  
         payload = {
             "prompt": req.input_ids,
             "top_p": gconfig.top_p,
@@ -244,6 +250,10 @@ class RemotevLLMEngine(InferenceEngine):
             "logprobs": 0,
             "stream": False,
         }
+        
+        # Add stop parameter only if we have valid stop sequences
+        if stop_sequences:
+            payload["stop"] = stop_sequences
 
         # Make request
         start_time = time.perf_counter()
@@ -253,6 +263,7 @@ class RemotevLLMEngine(InferenceEngine):
 
         # Deal with rollout interruption
         stop_reason = "length"
+        iteration_count = 0
 
         if req.rid in self.rid_to_address:
             server_addr = self.rid_to_address[req.rid]
@@ -265,57 +276,62 @@ class RemotevLLMEngine(InferenceEngine):
             self.rid_to_address[req.rid] = server_addr
             self.rid_queue.append(req.rid)
 
-        result = await arequest_with_retry(
-            session=self.session,
-            addr=server_addr,
-            endpoint="/v1/completions",
-            payload=payload,
-            method="POST",
-            max_retries=self.config.request_retries,
-            timeout=self.config.request_timeout,
-        )
+        while (
+            stop_reason != "stop"
+            and len(accumulated_output_tokens) < gconfig.max_new_tokens
+        ):
+            iteration_count += 1
+            logger.info(f"🔄 While loop iteration {iteration_count} START - stop_reason: '{stop_reason}', accumulated_tokens: {len(accumulated_output_tokens)}/{gconfig.max_new_tokens}")
+            logger.info(f"🔍 DEBUG: About to call VLLM API with payload max_tokens={payload.get('max_tokens')}")
+            
+            # loop until the generation is complete
+            result = await arequest_with_retry(
+                session=self.session,
+                addr=server_addr,
+                endpoint="/v1/completions",
+                payload=payload,
+                method="POST",
+                max_retries=self.config.request_retries,
+                timeout=self.config.request_timeout,
+            )
 
-        # Parse response
-        meta_info = result["choices"][0]
-        vllm_tokens = meta_info["logprobs"]["tokens"]
-        output_tokens_before = meta_info['text']
-        output_tokens = tokenizer.convert_tokens_to_ids(vllm_tokens)
-        output_logprobs = meta_info["logprobs"]["token_logprobs"]
+            logger.info(f"🔍 DEBUG: Got API response, parsing...")
+            # Parse response
+            meta_info = result["choices"][0]
+            vllm_tokens = meta_info["logprobs"]["tokens"]
+            output_tokens_before = meta_info['text']
+            output_tokens = tokenizer.convert_tokens_to_ids(vllm_tokens)
+            output_logprobs = meta_info["logprobs"]["token_logprobs"]
 
+            # Update accumulated outputs
+            accumulated_output_tokens.extend(output_tokens)
+            accumulated_output_logprobs.extend(output_logprobs)
+            # FIXME: Update with actual server versions
+            accumulated_versions.extend([-1] * len(output_tokens))
 
-        # Update accumulated outputs
-        accumulated_output_tokens.extend(output_tokens)
-        accumulated_output_logprobs.extend(output_logprobs)
-        # FIXME: Update with actual server versions
-        accumulated_versions.extend([-1] * len(output_tokens))
+            # Check if generation is complete
+            stop_reason = meta_info["finish_reason"]
+            logger.info(f"✅ Iteration {iteration_count} DONE - generated {len(output_tokens)} tokens, new_finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
+            logger.info(f"🔍 DEBUG: Checking continue condition: stop_reason='{stop_reason}' != 'stop' = {stop_reason != 'stop'}, tokens={len(accumulated_output_tokens)} < {gconfig.max_new_tokens} = {len(accumulated_output_tokens) < gconfig.max_new_tokens}")
 
-        # Check if generation is complete
-        stop_reason = meta_info["finish_reason"]
+            # Update payload for next iteration if needed
+            if stop_reason != "stop" and len(accumulated_output_tokens) < gconfig.max_new_tokens:
+                logger.info(f"🚀 CONTINUING generation - reason: stop_reason='{stop_reason}', tokens={len(accumulated_output_tokens)}<{gconfig.max_new_tokens}")
+                # Update prompt with generated tokens for next request
+                payload["prompt"] = req.input_ids + accumulated_output_tokens
+                payload["max_tokens"] = gconfig.max_new_tokens - len(accumulated_output_tokens)
+                # Keep the stop parameter unchanged for subsequent requests
+                if stop_sequences:
+                    payload["stop"] = stop_sequences
+            else:
+                logger.info(f"🛑 STOPPING generation - reason: stop_reason='{stop_reason}', tokens={len(accumulated_output_tokens)}/{gconfig.max_new_tokens}")
 
-        # Add error logging for finish_reason
-        if stop_reason == "length":
-            logger.error(f"Generation stopped due to length limit. finish_reason: {stop_reason}")
-        else:
-            logger.info(f"Generation completed normally. finish_reason: {stop_reason}")
-       # logger.warning(f"[LEN-CHK] {(len(output_tokens) - len(req.input_ids)) == len(output_logprobs)} "
-         #      f"(tokens={len(output_tokens)}, prompt={len(req.input_ids)}, lps={len(output_logprobs)})")
+        logger.info(f"🔍 DEBUG: Exited while loop - final stop_reason='{stop_reason}', final_tokens={len(accumulated_output_tokens)}")
 
-       # logger.warning(f"[PFX-CHK] {output_tokens[:len(req.input_ids)] == req.input_ids} "
-        #       f"(first 5 ids: {output_tokens[:5]} vs {req.input_ids[:5]})")
-       # logger.warn(f"accumulated_output_tokens: {accumulated_output_tokens}")
-       # logger.warn(f"accumulated_output_logprobs: {accumulated_output_logprobs}")
-       # logger.warn(f"output_tokens_before: {output_tokens_before}")
-       # logger.warn(f"vllm_tokens: {vllm_tokens}")
-       # logger.warn(f"output_tokens: {output_tokens}")
-       # logger.warn(f"output_logprobs: {output_logprobs}")
-       # logger.error(f"len(vllm_tokens): {len(vllm_tokens)}")
-       # logger.error(f"len(output_tokens): {len(output_tokens)}")
-       # logger.error(f"len(output_logprobs): {len(output_logprobs)}")
+        # Log how many iterations the while loop performed (only if not single successful iteration)
+        if not (iteration_count == 1 and stop_reason == "stop"):
+            logger.info(f"🏁 FINAL RESULT: {iteration_count} iterations, finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
         
-
-        # Check if generation is complete
-        stop_reason = meta_info["finish_reason"]
-
         latency = time.perf_counter() - start_time
 
         return LLMResponse(
