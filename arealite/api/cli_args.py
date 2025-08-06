@@ -50,7 +50,7 @@ class GenerationHyperparameters:
         default=1, metadata={"help": "Number of sequences to generate per prompt."}
     )
     max_new_tokens: int = field(
-        default=16384, metadata={"help": "Maximum number of tokens to generate."}
+        default=8192, metadata={"help": "Maximum number of tokens to generate."}
     )
     min_new_tokens: int = field(
         default=0, metadata={"help": "Minimum number of tokens to generate."}

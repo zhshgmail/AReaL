@@ -104,47 +104,15 @@ class FSDPEngine(BaseHFEngine):
             raise RuntimeError("Model not initialized")
         os.makedirs(path, exist_ok=True)
 
-        # FSDP2 checkpoint saving
-        # Get full state dict with FSDP2
         options = StateDictOptions(full_state_dict=True, cpu_offload=True)
         state_dict = get_model_state_dict(self.model, options=options)
 
-        # save huggingface model on rank 0
+                # save huggingface model on rank 0
         if dist.get_rank() == 0:
             os.makedirs(path, exist_ok=True)
-            model_to_save = (
-                self.model._fsdp_wrapped_module     # PyTorch ≥2.4
-                if hasattr(self.model, "_fsdp_wrapped_module")
-                else self.model
-    )
+            self.model.save_pretrained(path, state_dict=state_dict)
+            self.model_config.save_pretrained(path)
 
-           # 🔹 Some users checkpoint the *outer* wrapper which has no .config
-           base_cfg = getattr(model_to_save, "config", None) or self.model_config
-           cfg = copy.deepcopy(base_cfg)
-
-           # ── 2. fix architectures field ────────────────────────────────────
-           if getattr(cfg, "architectures", None):
-                 fixed = []
-                 for arch in cfg.architectures:
-                      if arch.startswith("FSDP"):
-                           new_arch = arch[len("FSDP") :]
-                           print(f"[rank-0] patched architecture: {arch} → {new_arch}")
-                           fixed.append(new_arch)
-            else:
-                fixed.append(arch)
-                 cfg.architectures = fixed
-
-          # ── 3. ensure auto_map is present so AutoModel works  ─────────────
-         if getattr(cfg, "auto_map", None) is None:
-               # crude heuristic: first architecture → canonical impl path
-               cls_name = cfg.architectures[0] if cfg.architectures else type(model_to_save).__name__
-               cfg.auto_map = {"AutoModel": f"{model_to_save.__module__}.{cls_name}"}
-
-         # ── 4. save weights + config + tokenizer ──────────────────────────
-         model_to_save.save_pretrained(path, state_dict=state_dict)   # ⬅ weights
-         cfg.save_pretrained(path)                                    # ⬅ config
-         if tokenizer is not None:
-              tokenizer.save_pretrained(path)
             if tokenizer is not None:
                 tokenizer.save_pretrained(path)
         dist.barrier()

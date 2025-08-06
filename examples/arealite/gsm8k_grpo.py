@@ -215,8 +215,9 @@ def main_grpo():
 
             # FIXME meta.path 需要更新，不能使用sglang的路径
 
-            rollout.update_weights(meta)
+            
             actor.upload_weights(meta)
+            rollout.update_weights(meta)
             # if dist.get_rank() == 0:
             #     future.result()
             dist.barrier()
