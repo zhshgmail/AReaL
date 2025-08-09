@@ -382,7 +382,7 @@ class vLLMConfig:
     block_size: int = 16
     swap_space: int = 4
     cpu_offload_gb: float = 0
-    max_seq_len_to_capture: int = 32768
+    max_seq_len_to_capture: int = 2048
 
     disable_sliding_window: bool = True
 

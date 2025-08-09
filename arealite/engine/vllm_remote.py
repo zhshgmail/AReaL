@@ -326,11 +326,19 @@ class RemotevLLMEngine(InferenceEngine):
             else:
                 logger.info(f"🛑 STOPPING generation - reason: stop_reason='{stop_reason}', tokens={len(accumulated_output_tokens)}/{gconfig.max_new_tokens}")
 
+<<<<<<< HEAD
         logger.info(f"🔍 DEBUG: Exited while loop - final stop_reason='{stop_reason}', final_tokens={len(accumulated_output_tokens)}")
 
         # Log how many iterations the while loop performed (only if not single successful iteration)
         if not (iteration_count == 1 and stop_reason == "stop"):
             logger.info(f"🏁 FINAL RESULT: {iteration_count} iterations, finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
+=======
+        # logger.info(f"🔍 DEBUG: Exited while loop - final stop_reason='{stop_reason}', final_tokens={len(accumulated_output_tokens)}")
+
+        # Log how many iterations the while loop performed (only if not single successful iteration)
+        # if not (iteration_count == 1 and stop_reason == "stop"):
+            # logger.info(f"🏁 FINAL RESULT: {iteration_count} iterations, finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
+>>>>>>> a6ba4c9 (solving oom problem)
         
         latency = time.perf_counter() - start_time
 
@@ -398,6 +406,86 @@ class RemotevLLMEngine(InferenceEngine):
                         terminate_process_and_children(int(pid), signal="SIGKILL")
                     except Exception as e:
                         logger.debug(f"Process {pid} already terminated: {e}")
+<<<<<<< HEAD
+=======
+               # Extra sweep: kill any residual vLLM-related processes for current user
+                try:
+                    import psutil  # type: ignore
+                    current_user = None
+                    try:
+                        current_user = psutil.Process(os.getpid()).username()
+                    except Exception:
+                        pass
+
+                    # Only target definitive vLLM server/worker processes. Avoid generic 'api_server' matches.
+                    vllm_markers = [
+                        "vllm",
+                        "vllm.entrypoints",
+                        "vllm_worker",
+                    ]
+                    exclude_patterns = [
+                        "torchrun",
+                        "trainer",
+                        "torch.distributed.run",
+                        "torch.distributed.launch",
+                        "torch.distributed.elastic",
+                        "gsm8k_grpo.py",
+                    ]
+                    killed = []
+                    skipped = []
+                    for proc in psutil.process_iter(["pid", "name", "cmdline", "username"]):
+                        try:
+                            pid = proc.info.get("pid")
+                            if not pid or pid == os.getpid():
+                                continue
+                            if current_user and proc.info.get("username") and proc.info.get("username") != current_user:
+                                continue
+                            name = (proc.info.get("name") or "").lower()
+                            cmdline_list = proc.info.get("cmdline") or []
+                            cmdline = " ".join(cmdline_list).lower()
+                            if any(ex in name or ex in cmdline for ex in exclude_patterns):
+                                # Skip processes that look like trainer/torchrun
+                                skipped.append((pid, cmdline, "excluded"))
+                                continue
+                            # Only kill if it's very likely a vLLM server/worker:
+                            #  - contains 'vllm' and (api_server/entrypoints/worker) or has a --model argument
+                            looks_like_vllm = ("vllm" in name or "vllm" in cmdline)
+                            has_entry = any(m in cmdline for m in ("api_server", "vllm.entrypoints", "vllm_worker"))
+                            has_model_arg = "--model" in cmdline
+                            if looks_like_vllm and (has_entry or has_model_arg):
+                                try:
+                                    proc.terminate()
+                                except Exception:
+                                    pass
+                                try:
+                                    proc.wait(timeout=3)
+                                except Exception:
+                                    pass
+                                try:
+                                    proc.kill()
+                                except Exception:
+                                    pass
+                                killed.append((pid, cmdline))
+                            else:
+                                # Not confident it's a vLLM process; skip but record for debugging
+                                if looks_like_vllm or has_entry:
+                                    skipped.append((pid, cmdline, "not-confident-vllm"))
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                            continue
+                    if killed:
+                        logger.info("Extra cleanup terminated vLLM-related processes:\n" +
+                                    "\n".join([f"PID {p}: {c}" for p, c in killed]))
+                    if skipped:
+                        logger.debug("Extra cleanup skipped processes (by rule):\n" +
+                                     "\n".join([f"PID {p} ({reason}): {c}" for p, c, reason in skipped]))
+                except Exception as e:
+                    logger.warning(f"Extra vLLM process sweep failed: {e}")
+
+                # Ensure processes are fully gone and files unlocked
+                time.sleep(3)
+
+
+>>>>>>> a6ba4c9 (solving oom problem)
                 # Synchronize only current process CUDA operations
 
               
