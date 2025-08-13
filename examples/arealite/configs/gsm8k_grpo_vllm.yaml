@@ -40,11 +40,7 @@ actor:
   gradient_checkpointing: false
   dtype: bfloat16
   mb_spec:
-<<<<<<< HEAD
-    max_tokens_per_mb: 2048
-=======
     max_tokens_per_mb: 10240
->>>>>>> a6ba4c9 (solving oom problem)
   optimizer:
     type: adam
     lr: 2e-6
@@ -96,17 +92,10 @@ vllm:
   seed: ${seed}
   skip_tokenizer_init: true
   dtype: ${actor.dtype}
-<<<<<<< HEAD
-  max_model_len: 32768
-  gpu_memory_utilization: 0.93
-#  max_num_seqs: 64
-  cpu_offload_gb: 2.0
-=======
   max_model_len: 8192
   gpu_memory_utilization: 0.9
 #  max_num_seqs: 64
 #  cpu_offload_gb: 2.0
->>>>>>> a6ba4c9 (solving oom problem)
 #  disable_sliding_window: true
 #  disable_log_requests: true
 

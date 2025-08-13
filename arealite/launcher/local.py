@@ -45,7 +45,6 @@ for job_state, process_statuses in JOB_STATE_TO_PROCESS_STATUS.items():
     for process_status in process_statuses:
         PROCESS_STATUS_TO_JOB_STATE[process_status] = job_state
 
-
 def terminate_process_and_children(pid: int, signal: Optional[Union[str, int]] = None):
     if signal is None:
         signal = signal_module.SIGKILL

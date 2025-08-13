@@ -281,9 +281,7 @@ class RemotevLLMEngine(InferenceEngine):
             and len(accumulated_output_tokens) < gconfig.max_new_tokens
         ):
             iteration_count += 1
-            logger.info(f"🔄 While loop iteration {iteration_count} START - stop_reason: '{stop_reason}', accumulated_tokens: {len(accumulated_output_tokens)}/{gconfig.max_new_tokens}")
-            logger.info(f"🔍 DEBUG: About to call VLLM API with payload max_tokens={payload.get('max_tokens')}")
-            
+          
             # loop until the generation is complete
             result = await arequest_with_retry(
                 session=self.session,
@@ -295,7 +293,6 @@ class RemotevLLMEngine(InferenceEngine):
                 timeout=self.config.request_timeout,
             )
 
-            logger.info(f"🔍 DEBUG: Got API response, parsing...")
             # Parse response
             meta_info = result["choices"][0]
             vllm_tokens = meta_info["logprobs"]["tokens"]
@@ -311,12 +308,10 @@ class RemotevLLMEngine(InferenceEngine):
 
             # Check if generation is complete
             stop_reason = meta_info["finish_reason"]
-            logger.info(f"✅ Iteration {iteration_count} DONE - generated {len(output_tokens)} tokens, new_finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
-            logger.info(f"🔍 DEBUG: Checking continue condition: stop_reason='{stop_reason}' != 'stop' = {stop_reason != 'stop'}, tokens={len(accumulated_output_tokens)} < {gconfig.max_new_tokens} = {len(accumulated_output_tokens) < gconfig.max_new_tokens}")
 
             # Update payload for next iteration if needed
             if stop_reason != "stop" and len(accumulated_output_tokens) < gconfig.max_new_tokens:
-                logger.info(f"🚀 CONTINUING generation - reason: stop_reason='{stop_reason}', tokens={len(accumulated_output_tokens)}<{gconfig.max_new_tokens}")
+                # continue generation without logging
                 # Update prompt with generated tokens for next request
                 payload["prompt"] = req.input_ids + accumulated_output_tokens
                 payload["max_tokens"] = gconfig.max_new_tokens - len(accumulated_output_tokens)
@@ -324,21 +319,9 @@ class RemotevLLMEngine(InferenceEngine):
                 if stop_sequences:
                     payload["stop"] = stop_sequences
             else:
-                logger.info(f"🛑 STOPPING generation - reason: stop_reason='{stop_reason}', tokens={len(accumulated_output_tokens)}/{gconfig.max_new_tokens}")
+                # generation finished
+                pass
 
-<<<<<<< HEAD
-        logger.info(f"🔍 DEBUG: Exited while loop - final stop_reason='{stop_reason}', final_tokens={len(accumulated_output_tokens)}")
-
-        # Log how many iterations the while loop performed (only if not single successful iteration)
-        if not (iteration_count == 1 and stop_reason == "stop"):
-            logger.info(f"🏁 FINAL RESULT: {iteration_count} iterations, finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
-=======
-        # logger.info(f"🔍 DEBUG: Exited while loop - final stop_reason='{stop_reason}', final_tokens={len(accumulated_output_tokens)}")
-
-        # Log how many iterations the while loop performed (only if not single successful iteration)
-        # if not (iteration_count == 1 and stop_reason == "stop"):
-            # logger.info(f"🏁 FINAL RESULT: {iteration_count} iterations, finish_reason: '{stop_reason}', total_tokens: {len(accumulated_output_tokens)}")
->>>>>>> a6ba4c9 (solving oom problem)
         
         latency = time.perf_counter() - start_time
 
@@ -364,8 +347,8 @@ class RemotevLLMEngine(InferenceEngine):
                 job_name_remained = str(os.getenv("JOB_NAME_REMAINED"))
                 count_remained = int(os.getenv("COUNT_REMAINED"))
                 gpu_remained = int(os.getenv("GPU_REMAINED"))
-                get_all_pid = str(os.getenv("GET_ALL_PID"))
-                get_all_pid = get_all_pid.split(',')
+                get_all_pid_raw = str(os.getenv("GET_ALL_PID"))
+                get_all_pid = [p for p in get_all_pid_raw.split(',') if p]
                 cmd_remained = str(os.getenv('CMD_REMAINED'))
                 cmd_remained_list = ['python3'+x for x in cmd_remained.split('python3')]
                 cmd_remained_list_origin = [x.replace(',',' ') for x in cmd_remained_list[1:]]
@@ -388,108 +371,41 @@ class RemotevLLMEngine(InferenceEngine):
                 import gc
                 import torch
                 
-                # First, try graceful shutdown
-                logger.info('Attempting graceful shutdown of vLLM processes...')
+                # 扩展 pid 列表: 仅初始 pid 及其子孙，避免误杀其他进程（去掉端口扫描导致的过度匹配）
+                try:
+                    import psutil  # type: ignore
+                except Exception:
+                    psutil = None
+                expanded_pids = set()
                 for pid in get_all_pid:
+                    try:
+                        ipid = int(pid)
+                    except ValueError:
+                        continue
+                    expanded_pids.add(ipid)
+                    if psutil:
+                        try:
+                            parent = psutil.Process(ipid)
+                            for child in parent.children(recursive=True):
+                                expanded_pids.add(child.pid)
+                        except psutil.Error:
+                            pass
+              
+                # First graceful shutdown then hard kill fallback
+                logger.info(f"Attempting graceful shutdown of vLLM root/child processes (total {len(expanded_pids)})...")
+                for pid in list(expanded_pids):
                     try:
                         terminate_process_and_children(int(pid), signal="SIGTERM")
                     except Exception as e:
-                        logger.warning(f"Failed to terminate process {pid}: {e}")
-
-                # Wait for processes to terminate and GPU memory to be released
+                        logger.debug(f"SIGTERM failed for {pid}: {e}")
                 time.sleep(5)
-                
-                # Force cleanup any remaining processes
-                logger.info('Force killing any remaining vLLM processes...')
-                for pid in get_all_pid:
+                # 强制 kill 避免残留
+                for pid in list(expanded_pids):
                     try:
                         terminate_process_and_children(int(pid), signal="SIGKILL")
-                    except Exception as e:
-                        logger.debug(f"Process {pid} already terminated: {e}")
-<<<<<<< HEAD
-=======
-               # Extra sweep: kill any residual vLLM-related processes for current user
-                try:
-                    import psutil  # type: ignore
-                    current_user = None
-                    try:
-                        current_user = psutil.Process(os.getpid()).username()
                     except Exception:
                         pass
-
-                    # Only target definitive vLLM server/worker processes. Avoid generic 'api_server' matches.
-                    vllm_markers = [
-                        "vllm",
-                        "vllm.entrypoints",
-                        "vllm_worker",
-                    ]
-                    exclude_patterns = [
-                        "torchrun",
-                        "trainer",
-                        "torch.distributed.run",
-                        "torch.distributed.launch",
-                        "torch.distributed.elastic",
-                        "gsm8k_grpo.py",
-                    ]
-                    killed = []
-                    skipped = []
-                    for proc in psutil.process_iter(["pid", "name", "cmdline", "username"]):
-                        try:
-                            pid = proc.info.get("pid")
-                            if not pid or pid == os.getpid():
-                                continue
-                            if current_user and proc.info.get("username") and proc.info.get("username") != current_user:
-                                continue
-                            name = (proc.info.get("name") or "").lower()
-                            cmdline_list = proc.info.get("cmdline") or []
-                            cmdline = " ".join(cmdline_list).lower()
-                            if any(ex in name or ex in cmdline for ex in exclude_patterns):
-                                # Skip processes that look like trainer/torchrun
-                                skipped.append((pid, cmdline, "excluded"))
-                                continue
-                            # Only kill if it's very likely a vLLM server/worker:
-                            #  - contains 'vllm' and (api_server/entrypoints/worker) or has a --model argument
-                            looks_like_vllm = ("vllm" in name or "vllm" in cmdline)
-                            has_entry = any(m in cmdline for m in ("api_server", "vllm.entrypoints", "vllm_worker"))
-                            has_model_arg = "--model" in cmdline
-                            if looks_like_vllm and (has_entry or has_model_arg):
-                                try:
-                                    proc.terminate()
-                                except Exception:
-                                    pass
-                                try:
-                                    proc.wait(timeout=3)
-                                except Exception:
-                                    pass
-                                try:
-                                    proc.kill()
-                                except Exception:
-                                    pass
-                                killed.append((pid, cmdline))
-                            else:
-                                # Not confident it's a vLLM process; skip but record for debugging
-                                if looks_like_vllm or has_entry:
-                                    skipped.append((pid, cmdline, "not-confident-vllm"))
-                        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-                            continue
-                    if killed:
-                        logger.info("Extra cleanup terminated vLLM-related processes:\n" +
-                                    "\n".join([f"PID {p}: {c}" for p, c in killed]))
-                    if skipped:
-                        logger.debug("Extra cleanup skipped processes (by rule):\n" +
-                                     "\n".join([f"PID {p} ({reason}): {c}" for p, c, reason in skipped]))
-                except Exception as e:
-                    logger.warning(f"Extra vLLM process sweep failed: {e}")
-
-                # Ensure processes are fully gone and files unlocked
-                time.sleep(3)
-
-
->>>>>>> a6ba4c9 (solving oom problem)
-                # Synchronize only current process CUDA operations
-
-              
-
+                time.sleep(2)
                 # torch.cuda.synchronize()
                 # torch.cuda.empty_cache()
                 # logger.info('Empty cache...')
@@ -498,6 +414,7 @@ class RemotevLLMEngine(InferenceEngine):
                 # torch.cuda.reset_peak_memory_stats()
                 # logger.info('Reser peak memory...')
 
+                logger.warning('Start to load new vllm...')
                 launcher = LocalLauncher(self.config.experiment_name, self.config.trial_name, self.config.fileroot)
                 # restart
 
@@ -513,6 +430,13 @@ class RemotevLLMEngine(InferenceEngine):
                     reset_gpu_counter=True,
                     new_env=True
                 )
+                # 记录新的 server 根 pid 供下一次更新使用
+                try:
+                    new_pids = launcher.get_all_pid()
+                    os.environ['GET_ALL_PID'] = ','.join(new_pids)
+                    logger.info(f"Updated GET_ALL_PID -> {new_pids}")
+                except Exception as e:
+                    logger.warning(f"Failed to refresh GET_ALL_PID: {e}")
                 logger.info('Wait for server ready...')
                 for addr in self.addresses:
                     old_setup_time  = self.config.setup_timeout
