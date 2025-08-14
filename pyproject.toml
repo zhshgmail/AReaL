@@ -31,10 +31,9 @@ dependencies = [
     "huggingface_hub",
     "datasets",
     "accelerate",
-    "transformers==4.51.1",
+    "transformers==4.54.0",
     
     # Scientific computing
-    "numpy<2.0.0",
     "scipy",
     "pandas",
     "matplotlib",
@@ -57,6 +56,8 @@ dependencies = [
     "torchdata",
     "autoflake",
     "tensordict",
+    "pybase64",
+    "msgspec",
     
     # Monitoring and logging
     "wandb",
@@ -128,6 +129,7 @@ dev = [
     "black==25.1.0",
     "isort==5.13.2",
     "clang-format==19.1.7",
+    "sh~=2.2",
 ]
 
 docs = [
