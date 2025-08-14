@@ -13,6 +13,8 @@ import psutil
 from areal.api.cli_args import (
     ClusterSpecConfig,
     LauncherConfig,
+    SGLangConfig,
+    vLLMConfig,
     RecoverConfig,
     SGLangConfig,
     parse_cli_args,
@@ -100,7 +102,11 @@ class LocalLauncher:
         return os.path.join(log_path, f"{job_name}.log")
 
     def __del__(self):
-        self.wait()
+        pass
+        # self.wait()
+
+    def reset_gpu_counter(self):
+        self._gpu_counter = 0
 
     def submit_array(
         self,
@@ -109,6 +115,8 @@ class LocalLauncher:
         count: int = 1,
         gpu: int = 0,
         env_vars: Optional[Dict] = None,
+        reset_gpu_counter = False,
+        new_env = False
     ):
         if env_vars is None:
             env_vars = {}
@@ -123,9 +131,14 @@ class LocalLauncher:
                     available_device_id = self._gpu_counter % len(self._cuda_devices)
                     self._gpu_counter += 1
                     visible_devices.append(available_device_id)
-                env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(
-                    str(self._cuda_devices[j]) for j in visible_devices
-                )
+                if reset_gpu_counter:
+                    env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(
+                        str(j) for j in visible_devices
+                    )
+                else:
+                    env_vars["CUDA_VISIBLE_DEVICES"] = ",".join(
+                        str(self._cuda_devices[j]) for j in visible_devices
+                    )
             c = (
                 " ".join(str(k) + "=" + str(v) for k, v in env_vars.items())
                 + " stdbuf -oL "
@@ -133,7 +146,19 @@ class LocalLauncher:
             )
             c = f"{c} 2>&1 | tee -a {self.log_path_of(job_name)}"
             logger.info("Starting local process with command: %s", c)
-            process = subprocess.Popen(c, shell=isinstance(c, str))
+            if new_env:
+                parent_env = os.environ.copy()
+                env_new = {
+                    "CONDA_PREFIX":parent_env['CONDA_PREFIX'],
+                    "HOME":parent_env['HOME'],
+                    "CONDA_EXE":parent_env['CONDA_EXE'],
+                    "CONDA_DEFAULT_ENV":parent_env['CONDA_DEFAULT_ENV'],
+                    "LD_LIBRARY_PATH":parent_env['LD_LIBRARY_PATH'],
+                    "PATH": parent_env['PATH']
+                }
+                process = subprocess.Popen(c, env =env_new, shell=isinstance(c, str))
+            else:
+                process = subprocess.Popen(c, shell=isinstance(c, str))
             self._jobs[f"{job_name}/{offset + i}"] = process
             self._job_counter[job_name] += 1
 
@@ -161,6 +186,12 @@ class LocalLauncher:
         for k, p in zip(keys, procs):
             self._jobs.pop(k)
             del p
+
+    def get_all_pid(self):
+        pid_list = []
+        for k, each_process in self._jobs.items():
+            pid_list.append(str(each_process.pid))
+        return pid_list
 
     def stop_all(self, signal=None):
         # signal argument is ignored in local stop_all
@@ -220,13 +251,13 @@ class LocalLauncher:
 
             for job_name in list(left):
                 state = self._job_states[job_name]
-                if state in check_status:
-                    raise JobException(
-                        run_name=self.run_name,
-                        worker_type=job_name.split("/")[0],
-                        host="local",
-                        reason=state,
-                    )
+                # if state in check_status:
+                #     raise JobException(
+                #         run_name=self.run_name,
+                #         worker_type=job_name.split("/")[0],
+                #         host="local",
+                #         reason=state,
+                #     )
                 if state in remove_status:
                     logger.info(f"Job {job_name} is {state}.(Removed)")
                     left.remove(job_name)
@@ -307,6 +338,42 @@ def local_main(config, run_id: int = 0):
         logger.info(
             f"LLM inference server launched at: AREAL_LLM_SERVER_ADDRS={','.join(server_addrs)}"
         )
+    elif alloc_mode.gen_backend == "vllm":
+        base_seed = config.vllm.seed
+        config.vllm = to_structured_cfg(config.vllm, vLLMConfig)
+        ports = find_free_ports(alloc_mode.gen_dp_size * 2, port_range=(10000, 50000))
+        host_ip = gethostip()
+        host = host_ip
+        for i in range(alloc_mode.gen_dp_size):  # 实际为实例数
+            config.vllm.seed = base_seed + i
+            cmd = vLLMConfig.build_cmd(
+                config.vllm,
+                host=host,
+                tp_size=alloc_mode.gen_tp_size,
+                base_gpu_id=0,
+                port=ports[i * 2]
+            )
+            server_cmd.append(cmd)
+            server_addrs.append(f"{host}:{ports[i * 2]}")
+
+        # Launch inference servers.
+        launcher.submit_array(
+            job_name="llm_server",
+            cmd=server_cmd,
+            count=alloc_mode.gen_dp_size,
+            gpu=alloc_mode.gen_pp_size * alloc_mode.gen_tp_size,
+            env_vars=get_env_vars(
+                config.cluster.cluster_name,
+                config.launcher.inference_server_env_vars,
+            ),
+        )
+        logger.info(
+            f"LLM inference server launched at: AREAL_LLM_SERVER_ADDRS={','.join(server_addrs)}"
+        )
+
+    print('==============================wait for vLLM start===============================')
+    get_all_pid = ','.join(launcher.get_all_pid())
+    server_cmd_remained = ','.join(server_cmd).replace(' ',',')
 
     # Launch trainer entrypoint
     if alloc_mode.type_ != AllocationType.LLM_SERVER_ONLY:
@@ -324,6 +391,11 @@ def local_main(config, run_id: int = 0):
                     config.cluster.cluster_name,
                     config.launcher.trainer_env_vars,
                 ),
+                JOB_NAME_REMAINED="llm_server",
+                CMD_REMAINED=server_cmd_remained,
+                COUNT_REMAINED=str(alloc_mode.gen_dp_size),
+                GPU_REMAINED=str(alloc_mode.gen_pp_size * alloc_mode.gen_tp_size),
+                GET_ALL_PID=get_all_pid,
                 AREAL_LLM_SERVER_ADDRS=",".join(server_addrs),
                 AREAL_RECOVER_RUN=str(int(is_recover_run)),
             ),

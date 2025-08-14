@@ -2,6 +2,7 @@ import os
 import time
 from datetime import datetime
 from typing import Callable, Dict, List, Optional
+import copy
 
 import torch
 import torch.distributed as dist
@@ -110,16 +111,15 @@ class FSDPEngine(BaseHFEngine):
             raise RuntimeError("Model not initialized")
         os.makedirs(path, exist_ok=True)
 
-        # FSDP2 checkpoint saving
-        # Get full state dict with FSDP2
         options = StateDictOptions(full_state_dict=True, cpu_offload=True)
         state_dict = get_model_state_dict(self.model, options=options)
 
-        # save huggingface model on rank 0
+                # save huggingface model on rank 0
         if dist.get_rank() == 0:
             os.makedirs(path, exist_ok=True)
             self.model.save_pretrained(path, state_dict=state_dict)
             self.model_config.save_pretrained(path)
+
             if tokenizer is not None:
                 tokenizer.save_pretrained(path)
             if processor is not None:

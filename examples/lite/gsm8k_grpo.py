@@ -1,6 +1,13 @@
 import itertools
 import os
 import sys
+import logging
+
+# Configure logging BEFORE other imports
+logging.getLogger("areal.engine.vllm_remote").setLevel(logging.CRITICAL)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.CRITICAL)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
 import torch
 import torch.distributed as dist
@@ -11,6 +18,7 @@ from areal.api.io_struct import AllocationMode, FinetuneSpec, StepInfo, WeightUp
 from areal.dataset import get_custom_dataset
 from areal.engine.ppo.actor import FSDPPPOActor
 from areal.engine.sglang_remote import RemoteSGLangEngine
+from areal.engine.vllm_remote import RemotevLLMEngine
 from areal.utils.device import log_gpu_stats
 from areal.utils.evaluator import Evaluator
 from areal.utils.recover import RecoverHandler
@@ -78,12 +86,14 @@ def main(args):
     )
 
     # Initialize inference engine
-    rollout = RemoteSGLangEngine(config.rollout)
+    # rollout = RemoteSGLangEngine(config.rollout)
+    rollout = RemotevLLMEngine(config.rollout)
     rollout.initialize(None, ft_spec)
-    eval_rollout = RemoteSGLangEngine(config.rollout)
-    eval_rollout.initialize(None, ft_spec)
-    # NOTE: set a large version such that eval does not have any offpolicyness control
-    eval_rollout.set_version(int(1e12))
+    # FIXME
+    # eval_rollout = RemoteSGLangEngine(config.rollout)
+    # eval_rollout.initialize(None, ft_spec)
+    # # NOTE: set a large version such that eval does not have any offpolicyness control
+    # eval_rollout.set_version(int(1e12))
 
     # Initialize train engine
     actor = FSDPPPOActor(config=config.actor)
@@ -192,11 +202,15 @@ def main(args):
 
         with stats_tracker.record_timing("update_weights"):
             rollout.pause()
-            if dist.get_rank() == 0:
-                future = rollout.update_weights(weight_update_meta)
+            # if dist.get_rank() == 0:
+            
+            # FIXME meta.path 需要更新，不能使用sglang的路径
+            
+            
             actor.upload_weights(weight_update_meta)
-            if dist.get_rank() == 0:
-                future.result()
+            rollout.update_weights(weight_update_meta)
+            # if dist.get_rank() == 0:
+            #     future.result()
             dist.barrier(device_ids=[actor.device.index])
             torch.cuda.synchronize()
             rollout.resume()
@@ -206,34 +220,35 @@ def main(args):
         with stats_tracker.record_timing("save"):
             saver.save(actor, epoch, step, global_step, tokenizer=tokenizer)
 
-        with stats_tracker.record_timing("eval"):
-
-            def evaluate_fn():
-                rollout.pause()
-                cnt = 0
-                for data in valid_dataloader:
-                    for item in data:
-                        eval_rollout.submit(item, workflow)
-                        cnt += 1
-                batch = eval_rollout.wait(cnt, timeout=None)
-                rewards = batch["rewards"].float().to(actor.device)
-                with stats_tracker.scope("grpo-eval"):
-                    stats_tracker.denominator(
-                        n_seqs=torch.ones(
-                            rewards.shape[0],
-                            device=rewards.device,
-                            dtype=torch.bool,
-                        )
-                    )
-                    stats_tracker.stat(task_reward=rewards, denominator="n_seqs")
-                rollout.resume()
-
-            evaluator.evaluate(
-                evaluate_fn,
-                epoch,
-                step,
-                global_step,
-            )
+        # FIXME
+        # with stats_tracker.record_timing("eval"):
+        #
+        #     def evaluate_fn():
+        #         rollout.pause()
+        #         cnt = 0
+        #         for data in valid_dataloader:
+        #             for item in data:
+        #                 eval_rollout.submit(item, workflow)
+        #                 cnt += 1
+        #         batch = eval_rollout.wait(cnt, timeout=None)
+        #         rewards = batch["rewards"].float().to(actor.device)
+        #         with stats_tracker.scope("grpo-eval"):
+        #             stats_tracker.denominator(
+        #                 n_seqs=torch.ones(
+        #                     rewards.shape[0],
+        #                     device=rewards.device,
+        #                     dtype=torch.bool,
+        #                 )
+        #             )
+        #             stats_tracker.stat(task_reward=rewards, denominator="n_seqs")
+        #         rollout.resume()
+        #
+        #     evaluator.evaluate(
+        #         evaluate_fn,
+        #         epoch,
+        #         step,
+        #         global_step,
+        #     )
 
         with stats_tracker.record_timing("checkpoint_for_recover"):
             recover_handler.dump(
@@ -249,7 +264,8 @@ def main(args):
         stats_logger.commit(epoch, step, global_step, stats)
 
     stats_logger.close()
-    eval_rollout.destroy()
+    # FIXME
+    # eval_rollout.destroy()
     rollout.destroy()
     if ref is not None:
         ref.destroy()

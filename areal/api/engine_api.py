@@ -137,7 +137,7 @@ class InferenceEngine(abc.ABC):
     def destroy(self):
         """Destroy the engine and release GPU memory."""
 
-    async def agenerate(self, req: ModelRequest) -> ModelResponse:
+    async def agenerate(self, req: ModelRequest, tokenizer) -> ModelResponse:
         """Asynchronously generate a response for the given request."""
         raise NotImplementedError()
 
