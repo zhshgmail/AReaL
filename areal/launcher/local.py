@@ -13,10 +13,9 @@ import psutil
 from areal.api.cli_args import (
     ClusterSpecConfig,
     LauncherConfig,
-    SGLangConfig,
-    vLLMConfig,
     RecoverConfig,
     SGLangConfig,
+    vLLMConfig,
     parse_cli_args,
     to_structured_cfg,
 )
