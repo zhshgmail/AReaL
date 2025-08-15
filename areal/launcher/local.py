@@ -153,7 +153,8 @@ class LocalLauncher:
                     "CONDA_EXE":parent_env['CONDA_EXE'],
                     "CONDA_DEFAULT_ENV":parent_env['CONDA_DEFAULT_ENV'],
                     "LD_LIBRARY_PATH":parent_env['LD_LIBRARY_PATH'],
-                    "PATH": parent_env['PATH']
+                    "PATH": parent_env['PATH'],
+                    "CUDA_VISIBLE_DEVICES": "2,3" # add gpu rank setting to avoid using rank 0 when restarting
                 }
                 process = subprocess.Popen(c, env =env_new, shell=isinstance(c, str))
             else:

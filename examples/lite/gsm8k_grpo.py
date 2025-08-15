@@ -108,8 +108,11 @@ def main(args):
     # due to `engine.get_param_specs()`.
     # Therefore, we create weight update meta on all ranks, then broadcast the one on rank 0.
     weight_update_meta = [
-        WeightUpdateMeta.from_fsdp_nccl(
-            AllocationMode.from_str(config.allocation_mode), actor
+        WeightUpdateMeta.from_disk(
+            experiment_name=config.experiment_name,
+            trial_name=config.trial_name,
+            file_root=config.cluster.fileroot,
+            name="default",
         )
     ]
     dist.broadcast_object_list(weight_update_meta, src=0)

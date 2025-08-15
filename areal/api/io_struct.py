@@ -249,7 +249,7 @@ class WeightUpdateMeta:
     nccl_master_port: int = 29500
     nccl_param_specs: List[List[ParamSpec]] = field(default_factory=list)
     nccl_group_name: str = "update_weight_group"
-
+    model_version: int = 0
     @classmethod
     def from_disk(
         cls,
