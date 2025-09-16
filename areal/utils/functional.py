@@ -126,10 +126,16 @@ def ppo_actor_loss_fn(
     advantages: torch.Tensor,
     eps_clip: float,
     loss_mask: torch.Tensor,
+    proximal_logprobs_t: Optional[torch.Tensor] = None,
     c_clip: Optional[float] = None,
     behav_imp_weight_cap: Optional[float] = None,
 ) -> Tuple[torch.Tensor, Dict]:
     """
+    Params:
+        proximal_logprobs: the proximal policy logprob closest to the target policy.
+        proximal_logprobs_t: the segment-wise proximal policy logprobs.
+
+
     When decoupled loss is disabled:
     1. if recompute logp, both old_logprobs and proximal_logprobs are recomputed logp;
     2. if no recomputation, both old_logp and proximal_logprobs are produced by the inference backend.
@@ -151,7 +157,10 @@ def ppo_actor_loss_fn(
         pg_loss = torch.min(pg_loss, pg_loss3)
     else:
         dual_clip_mask = torch.zeros_like(clip_mask)
-    behav_kl = proximal_logprobs - old_logprobs
+    if proximal_logprobs_t is not None:
+        behav_kl = proximal_logprobs_t - old_logprobs
+    else:
+        behav_kl = proximal_logprobs - old_logprobs
     behav_imp_weight = behav_kl.exp()
     behav_mask = (
         (behav_imp_weight <= behav_imp_weight_cap).logical_and(loss_mask)

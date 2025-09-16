@@ -118,19 +118,22 @@ class RemoteSGLangEngine(InferenceEngine):
         if stop is not None:
             sample_params["stop"] = stop
 
+        # See more payload param at: 
+        # https://github.com/sgl-project/sglang/blob/151e287d1af60e4e40fe4ae653fed440c93e8264/python/sglang/srt/managers/io_struct.py#L65
         payload = {
             "input_ids": req.input_ids.copy(),
             "image_data": req.image_data,  # ImageObject or str
             "sampling_params": sample_params,
             "return_logprob": True,
             "stream": False,
+            "logprob_start_len": 0,  # added by bruceli
         }
 
         # Make request
         start_time = time.perf_counter()
         accumulated_output_tokens = []
         accumulated_output_logprobs = []
-        accumulated_versions = []
+        accumulated_versions = []  # Per-token policy version
 
         # A single "rid" shares the same sever to allow KV cache reuse
         if req.rid in self.rid_to_address:
@@ -168,6 +171,10 @@ class RemoteSGLangEngine(InferenceEngine):
                 timeout=self.config.request_timeout,
             )
 
+            # logger.warning(f"result keys: {result.keys()}")
+            # logger.warning(f"result: {result}")
+
+
             meta_info = result["meta_info"]
             # Check if generation is complete
             finish_reason = meta_info["finish_reason"]
@@ -185,8 +192,8 @@ class RemoteSGLangEngine(InferenceEngine):
             # Update accumulated outputs
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
-            # FIXME: Update with actual server versions
-            accumulated_versions.extend([-1] * len(output_tokens))
+            # Track the current policy version for each generated token
+            accumulated_versions.extend([self._version] * len(output_tokens))
 
             payload["input_ids"] += output_tokens
             sample_params["max_new_tokens"] -= len(output_tokens)
