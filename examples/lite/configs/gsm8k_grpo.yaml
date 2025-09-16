@@ -2,12 +2,12 @@ experiment_name: gsm8k-grpo
 trial_name: trial0
 allocation_mode: sglang.d4p1t1+d4p1t1
 cluster:
-  fileroot: /tmp/areal/experiments
+  fileroot: /home/data/bruceli/areal/experiments
   n_nodes: 1
   n_gpus_per_node: 8
   name_resolve:
     type: nfs
-    nfs_record_root: /tmp/areal/name_resolve
+    nfs_record_root: /home/data/bruceli/areal/name_resolve
 seed: 1
 total_train_epochs: 10
 tokenizer_path: ${actor.path}
@@ -32,7 +32,7 @@ gconfig:
 actor:
   experiment_name: ${experiment_name}
   trial_name: ${trial_name}
-  path: Qwen/Qwen2.5-1.5B-Instruct
+  path: /home/data/Qwen/Qwen2.5-1.5B-Instruct
   init_from_scratch: false
   disable_dropout: true
   gradient_checkpointing: false
@@ -91,7 +91,7 @@ train_dataset:
   shuffle: true
   pin_memory: true
   num_workers: 4
-  path: openai/gsm8k
+  path: /home/data/gsm8k
   type: rl
 
 valid_dataset:
@@ -99,7 +99,7 @@ valid_dataset:
   shuffle: true
   pin_memory: true
   num_workers: 4
-  path: openai/gsm8k
+  path: /home/data/gsm8k
   type: rl
 
 # Utilities
