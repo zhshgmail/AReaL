@@ -64,12 +64,6 @@ class RLVRWorkflow(RolloutWorkflow):
         results = []
         for resp in resps:
             seq = resp.input_tokens + resp.output_tokens
-            # Use proximal_logprobs_t for segment-wise PPO if available, fallback to original zero-padding
-            if hasattr(resp, 'proximal_logprobs_t') and resp.proximal_logprobs_t:
-                proximal_logprobs = resp.proximal_logprobs_t
-            else:
-                proximal_logprobs = [0.0] * resp.input_len + resp.output_logprobs
-            
             logprobs = [0.0] * resp.input_len + resp.output_logprobs
             loss_mask = [0] * resp.input_len + [1] * resp.output_len
             versions = [-1] * resp.input_len + resp.output_versions
@@ -94,11 +88,14 @@ class RLVRWorkflow(RolloutWorkflow):
                 logprobs=torch.tensor(logprobs).unsqueeze(0),
                 versions=torch.tensor(versions).unsqueeze(0),
                 attention_mask=torch.ones(len(seq), dtype=torch.bool).unsqueeze(0),
-                # segment-wise PPO: proximal policy logprobs for current tokens (teacher forcing + decode)
-                proximal_logprobs_t=torch.tensor(proximal_logprobs).unsqueeze(0),
                 # reward
                 rewards=torch.tensor([float(reward)]),
             )
+            
+            # Only add proximal_logprobs_t if we have valid segment-wise data
+            if hasattr(resp, 'proximal_logprobs_t') and resp.proximal_logprobs_t:
+                res["proximal_logprobs_t"] = torch.tensor(resp.proximal_logprobs_t).unsqueeze(0)
+            
             results.append(TensorDict(res, batch_size=[1]))
 
         if self.dump_dir is not None:
