@@ -126,7 +126,7 @@ class RemoteSGLangEngine(InferenceEngine):
             "sampling_params": sample_params,
             "return_logprob": True,
             "stream": False,
-            "logprob_start_len": 0,  # added by bruceli
+            "logprob_start_len": -1,  # added by bruceli
         }
 
         # Make request
@@ -134,6 +134,7 @@ class RemoteSGLangEngine(InferenceEngine):
         accumulated_output_tokens = []
         accumulated_output_logprobs = []
         accumulated_versions = []  # Per-token policy version
+        proximal_logprobs_t = []
 
         # A single "rid" shares the same sever to allow KV cache reuse
         if req.rid in self.rid_to_address:
@@ -188,17 +189,24 @@ class RemoteSGLangEngine(InferenceEngine):
             # Parse response
             output_tokens = [x[1] for x in meta_info["output_token_logprobs"]]
             output_logprobs = [x[0] for x in meta_info["output_token_logprobs"]]
-
-            # Update accumulated outputs
+            
+            # For segment-wise PPO: always update to latest input logprobs 
+            input_logprobs = meta_info["input_token_logprobs"]
+            proximal_logprobs_t.extend(input_logprobs)
+            # Update accumulated outputs  
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
             # Track the current policy version for each generated token
             accumulated_versions.extend([self._version] * len(output_tokens))
 
+            # Set logprob_start_len to current input length, then update input_ids
+            payload["logprob_start_len"] = len(payload["input_ids"])
             payload["input_ids"] += output_tokens
             sample_params["max_new_tokens"] -= len(output_tokens)
 
         latency = time.perf_counter() - start_time
+
+        proximal_logprobs_t.extend(output_logprobs)
 
         response = ModelResponse(
             input_tokens=req.input_ids,
@@ -206,6 +214,7 @@ class RemoteSGLangEngine(InferenceEngine):
             output_tokens=accumulated_output_tokens,
             output_logprobs=accumulated_output_logprobs,
             output_versions=accumulated_versions,
+            proximal_logprobs_t=proximal_logprobs_t,
             stop_reason=stop_reason,
             latency=latency,
             ttft=latency,  # Simplified for non-streaming

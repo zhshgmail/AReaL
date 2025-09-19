@@ -59,6 +59,7 @@ class MultiTurnWorkflow(RolloutWorkflow):
         # Enforces `n_samples=1`
         # Placeholders for the results
         seq, logprobs, loss_mask, versions = [], [], [], []
+        proximal_logprobs_t = []  # For segment-wise PPO
         messages = data["messages"]
         # Convert the prompt into input_ids
         input_ids = self.tokenizer.apply_chat_template(
@@ -98,6 +99,16 @@ class MultiTurnWorkflow(RolloutWorkflow):
             )
             seq += resp.input_tokens[-input_len:] + resp.output_tokens
             logprobs += [0.0] * input_len + resp.output_logprobs
+            # Use proximal_logprobs_t for segment-wise PPO if available, fallback to original zero-padding
+            if hasattr(resp, 'proximal_logprobs_t') and resp.proximal_logprobs_t:
+                # For multi-turn, we need to extract only the new part of proximal_logprobs_t
+                if len(resp.proximal_logprobs_t) >= input_len + resp.output_len:
+                    new_proximal_logprobs = resp.proximal_logprobs_t[-(input_len + resp.output_len):]
+                else:
+                    new_proximal_logprobs = resp.proximal_logprobs_t
+                proximal_logprobs_t += new_proximal_logprobs
+            else:
+                proximal_logprobs_t += [0.0] * input_len + resp.output_logprobs
             loss_mask += [0] * input_len + [1] * resp.output_len
             versions += [-1] * input_len + resp.output_versions
             # Increase counter
@@ -116,6 +127,8 @@ class MultiTurnWorkflow(RolloutWorkflow):
             logprobs=torch.tensor(logprobs),
             loss_mask=torch.tensor(loss_mask),
             versions=torch.tensor(versions),
+            # segment-wise PPO: proximal policy logprobs for current tokens
+            proximal_logprobs_t=torch.tensor(proximal_logprobs_t),
             rewards=torch.tensor(float(reward * discount)),
             attention_mask=torch.ones(len(seq), dtype=torch.bool),
         )

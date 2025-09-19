@@ -272,6 +272,9 @@ def grpo_loss_fn(
     advantages = input_data["advantages"]
     loss_mask = input_data["loss_mask"].bool()
     prox_logp = input_data["prox_logp"]
+    
+    # Get segment-wise proximal logprobs if available
+    proximal_logprobs_t = input_data.get("proximal_logprobs_t", None)
 
     logprobs, entropy = gather_logprobs_entropy(
         logits, torch.roll(input_ids, shifts=-1, dims=-1), temperature
@@ -285,6 +288,7 @@ def grpo_loss_fn(
         loss_mask=loss_mask,
         c_clip=c_clip,
         proximal_logprobs=prox_logp,
+        proximal_logprobs_t=proximal_logprobs_t,
         behav_imp_weight_cap=behav_imp_weight_cap,
     )
 
