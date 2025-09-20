@@ -189,10 +189,13 @@ class RemoteSGLangEngine(InferenceEngine):
             # Parse response
             output_tokens = [x[1] for x in meta_info["output_token_logprobs"]]
             output_logprobs = [x[0] for x in meta_info["output_token_logprobs"]]
-            
-            # For segment-wise PPO: always update to latest input logprobs 
-            input_logprobs = meta_info["input_token_logprobs"]
-            proximal_logprobs_t.extend(input_logprobs)
+             
+            # For segment-wise PPO: extract input logprobs similar to output logprobs
+            # input_token_logprobs is also in triplet format, take the first element
+            input_logprobs_raw = [x[0] for x in meta_info["input_token_logprobs"]]
+            # Replace None (especially the first token) with 0.0
+            input_logprobs = [0.0 if x is None else x for x in input_logprobs_raw]
+            proximal_logprobs_t.extend(input_logprobs[1:])
             # Update accumulated outputs  
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
@@ -200,7 +203,7 @@ class RemoteSGLangEngine(InferenceEngine):
             accumulated_versions.extend([self._version] * len(output_tokens))
 
             # Set logprob_start_len to current input length, then update input_ids
-            payload["logprob_start_len"] = len(payload["input_ids"])
+            payload["logprob_start_len"] = len(payload["input_ids"]) - 1
             payload["input_ids"] += output_tokens
             sample_params["max_new_tokens"] -= len(output_tokens)
 

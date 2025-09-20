@@ -1,6 +1,7 @@
 import itertools
 import os
 import sys
+import subprocess
 
 import torch
 import torch.distributed as dist
@@ -25,6 +26,40 @@ def gsm8k_reward_fn(prompt, completions, prompt_ids, completion_ids, answer, **k
     from realhf.impl.dataset.math_parser import process_results
 
     return int(process_results(completions, answer)[0])
+
+
+def mem(tag):
+    """Memory monitoring function to track CUDA memory usage"""
+    # Only print on rank 0 to avoid duplicate logs
+    if dist.get_rank() != 0:
+        return
+        
+    alloc = torch.cuda.memory_allocated() / 2**30
+    reserv = torch.cuda.memory_reserved() / 2**30
+    print(f"[MEM-MONITOR] {tag}  alloc={alloc:.2f}GiB  reserved={reserv:.2f}GiB", flush=True)
+    
+    # Also log to see if it shows up in the log files
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"[MEM-MONITOR] {tag}  alloc={alloc:.2f}GiB  reserved={reserv:.2f}GiB")
+    
+    # Optional: Get nvidia-smi process memory
+    try:
+        pid = os.getpid()
+        # Try Windows-compatible nvidia-smi command
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
+            text=True
+        ).strip()
+        for line in out.split('\n'):
+            if line.strip() and str(pid) in line:
+                used_mem = line.split(',')[-1].strip()
+                if used_mem.isdigit():
+                    print(f"[MEM-MONITOR] nvidia-smi used={int(used_mem)/1024:.2f}GiB", flush=True)
+                    logger.info(f"[MEM-MONITOR] nvidia-smi used={int(used_mem)/1024:.2f}GiB")
+                break
+    except Exception as e: 
+        print(f"[MEM-MONITOR] nvidia-smi failed: {e}", flush=True)
 
 
 def main(args):
@@ -156,11 +191,21 @@ def main(args):
             steps_per_epoch=steps_per_epoch,
         )
 
+        # Test output to verify code execution
+        if dist.get_rank() == 0:
+            print(f"[DEBUG] Starting training step {global_step}", flush=True)
+
+        # Memory monitoring at start of step
+        mem(f"step_{global_step}_start")
+
         with stats_tracker.record_timing("rollout"):
             if config.async_training:
                 batch = rollout.prepare_batch(train_dataloader, workflow=workflow)
             else:
                 batch = rollout.rollout_batch(next(data_generator), workflow=workflow)
+
+        # Memory monitoring after generation/rollout
+        mem(f"step_{global_step}_after_generate")
 
         batch = batch.to(actor.device)
         # Create barrier to synchronize all rollout processes.
@@ -189,6 +234,9 @@ def main(args):
             stats = actor.ppo_update(batch)
             actor.step_lr_scheduler()
             log_gpu_stats("ppo update")
+
+        # Memory monitoring after training step
+        mem(f"step_{global_step}_after_train_step")
 
         with stats_tracker.record_timing("update_weights"):
             rollout.pause()
@@ -247,6 +295,15 @@ def main(args):
             )
 
         stats_logger.commit(epoch, step, global_step, stats)
+
+        # Memory monitoring at end of step
+        mem(f"step_{global_step}_end")
+        
+        # Optional: Force memory cleanup every few steps
+        if global_step % 5 == 0:
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            mem(f"step_{global_step}_after_cleanup")
 
     stats_logger.close()
     eval_rollout.destroy()

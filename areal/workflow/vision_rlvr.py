@@ -93,13 +93,11 @@ class VisionRLVRWorkflow(RLVRWorkflow):
                 logprobs=torch.tensor(logprobs).unsqueeze(0),
                 versions=torch.tensor(versions).unsqueeze(0),
                 attention_mask=torch.ones(len(seq), dtype=torch.bool).unsqueeze(0),
+                proximal_logprobs_t=torch.tensor([0.0] * resp.input_len + resp.proximal_logprobs_t).unsqueeze(0),
                 # reward
                 rewards=torch.tensor([reward]),
             )
             
-            # Only add proximal_logprobs_t if we have valid segment-wise data
-            if hasattr(resp, 'proximal_logprobs_t') and resp.proximal_logprobs_t:
-                res["proximal_logprobs_t"] = torch.tensor(resp.proximal_logprobs_t).unsqueeze(0)
             
             results.append(TensorDict(res, batch_size=[1]))
         if self.dump_dir is not None:
