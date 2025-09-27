@@ -254,6 +254,79 @@ class WorkflowExecutor:
             logger.info(
                 f"Rollout results are ready! accepted/count = {accepted}/{count}"
             )
+        # Non-blocking recompute across the whole cache: for any cached sample,
+        # if there exist output tokens with version == current_version - 1,
+        # recompute once (prefill on full output span) and patch exactly those
+        # positions in proximal_logprobs_t.
+        try:
+            current_ver = self.inference_engine.get_version()
+            logger.warning(
+                f"[Recompute] begin scan: current_ver={current_ver}, cache_size={len(self.result_cache)}"
+            )
+            total_candidates = 0
+            total_patched = 0
+            if hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
+                for idx, td in enumerate(self.result_cache):
+                    try:
+                        input_ids = td.get("input_ids", None)
+                        versions = td.get("versions", None)
+                        loss_mask = td.get("loss_mask", None)
+                        prox = td.get("proximal_logprobs_t", None)
+                        if (
+                            input_ids is None
+                            or versions is None
+                            or loss_mask is None
+                            or prox is None
+                        ):
+                            continue
+                        ids = input_ids[0].tolist()
+                        ver = versions[0].tolist()
+                        lm = loss_mask[0].tolist()
+                        out_len = int(sum(lm))
+                        prompt_len = int(len(ids) - out_len)
+                        if out_len <= 0:
+                            continue
+                        # indices to patch in output segment coords [0..out_len)
+                        need_idxs = [
+                            i for i in range(out_len)
+                            if ver[prompt_len + i] == current_ver - 1
+                        ]
+                        v_last = ver[prompt_len + out_len - 1]
+                        if need_idxs:
+                            total_candidates += 1
+                            logger.info(
+                                f"[Recompute] sample#{idx}: out_len={out_len}, v_last={v_last}, target_cnt={len(need_idxs)}"
+                            )
+                        else:
+                            logger.info(
+                                f"[Recompute] sample#{idx}: no targets, out_len={out_len}, v_last={v_last}"
+                            )
+                        if not need_idxs:
+                            continue
+                        latest_out_logp = self.inference_engine.recompute_output_logprobs_sync(
+                            input_ids=ids,
+                            start_index=max(0, prompt_len - 1),
+                        )
+                        if len(latest_out_logp) != out_len:
+                            raise RuntimeError(
+                                f"Recompute length mismatch: got {len(latest_out_logp)} vs out_len {out_len}"
+                            )
+                        for j in need_idxs:
+                            prox[0, prompt_len + j] = float(latest_out_logp[j])
+                        total_patched += len(need_idxs)
+                        logger.warning(
+                            f"[Recompute] sample#{idx}: patched={len(need_idxs)}/out_len={out_len}"
+                        )
+                    except Exception:
+                        traceback.print_exc()
+                        continue
+            logger.warning(
+                f"[Recompute] end scan: candidates={total_candidates}, total_patched={total_patched}"
+            )
+        except Exception:
+            traceback.print_exc()
+
+        # After patching the cache, return the requested number of results
         results, self.result_cache = (
             self.result_cache[:count],
             self.result_cache[count:],

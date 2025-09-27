@@ -275,6 +275,9 @@ def grpo_loss_fn(
     
     # Get segment-wise proximal logprobs if available
     proximal_logprobs_t = input_data.get("proximal_logprobs_t", None)
+    if proximal_logprobs_t is not None:
+        # Apply same roll(-1) transformation as other logprobs for next-token prediction alignment
+        proximal_logprobs_t = torch.roll(proximal_logprobs_t, shifts=-1, dims=-1)
 
     logprobs, entropy = gather_logprobs_entropy(
         logits, torch.roll(input_ids, shifts=-1, dims=-1), temperature

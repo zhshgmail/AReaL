@@ -96,6 +96,51 @@ class RemoteSGLangEngine(InferenceEngine):
             return server
         raise NotImplementedError("Only round-robin scheduling is implemented.")
 
+    # Used by WorkflowExecutor.wait() to patch proximal_logprobs_t
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int,
+        image_data: Optional[List[Any]] = None,
+    ) -> List[float]:
+        """Synchronously recompute latest-policy logprobs for the output span.
+
+        Params:
+            input_ids: full sequence (prompt + outputs)
+            prompt_len: length of the prompt segment
+            image_data: optional VLM images (unused for RLVR)
+
+        Returns:
+            A list of length len(input_ids) - prompt_len containing
+            prefill-computed logprobs for each output token under the
+            latest engine version.
+        """
+        server_addr = self.choose_server()
+        url = f"http://{server_addr}/generate"
+        payload = {
+            "input_ids": input_ids,
+            "image_data": image_data or [],
+            "sampling_params": {
+                "top_p": 1.0,
+                "top_k": int(1e8),
+                "max_new_tokens": 0,
+                "temperature": 0.0,
+            },
+            "return_logprob": True,
+            "stream": False,
+            # start at prompt_len-1 so returned [1:] aligns to outputs
+            "logprob_start_len": max(0, int(start_index)),
+        }
+        res = requests.post(url, json=payload, timeout=self.config.request_timeout)
+        res.raise_for_status()
+        result = res.json()
+        meta = result["meta_info"]
+        ilp = [x[0] for x in meta["input_token_logprobs"]]
+        # Skip the position at start_index itself; return following tokens
+        return ilp[1:]
+
+    
+
     async def agenerate(self, req: ModelRequest) -> ModelResponse:
         """Async version of generate using aiohttp."""
         # Prepare request payload
@@ -191,10 +236,7 @@ class RemoteSGLangEngine(InferenceEngine):
             output_logprobs = [x[0] for x in meta_info["output_token_logprobs"]]
              
             # For segment-wise PPO: extract input logprobs similar to output logprobs
-            # input_token_logprobs is also in triplet format, take the first element
-            input_logprobs_raw = [x[0] for x in meta_info["input_token_logprobs"]]
-            # Replace None (especially the first token) with 0.0
-            input_logprobs = [0.0 if x is None else x for x in input_logprobs_raw]
+            input_logprobs = [x[0] for x in meta_info["input_token_logprobs"]]
             proximal_logprobs_t.extend(input_logprobs[1:])
             # Update accumulated outputs  
             accumulated_output_tokens.extend(output_tokens)
@@ -210,6 +252,13 @@ class RemoteSGLangEngine(InferenceEngine):
         latency = time.perf_counter() - start_time
 
         proximal_logprobs_t.extend(output_logprobs)
+
+        
+
+
+        # Debug: Compare logprobs lengths  
+        # import logging
+        # logger.warning(f"[DEBUG] output_logprobs length: {len(accumulated_output_logprobs)}, proximal_logprobs_t length: {len(proximal_logprobs_t)}")
 
         response = ModelResponse(
             input_tokens=req.input_ids,

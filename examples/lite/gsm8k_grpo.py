@@ -1,7 +1,6 @@
 import itertools
 import os
 import sys
-import subprocess
 
 import torch
 import torch.distributed as dist
@@ -26,40 +25,6 @@ def gsm8k_reward_fn(prompt, completions, prompt_ids, completion_ids, answer, **k
     from realhf.impl.dataset.math_parser import process_results
 
     return int(process_results(completions, answer)[0])
-
-
-def mem(tag):
-    """Memory monitoring function to track CUDA memory usage"""
-    # Only print on rank 0 to avoid duplicate logs
-    if dist.get_rank() != 0:
-        return
-        
-    alloc = torch.cuda.memory_allocated() / 2**30
-    reserv = torch.cuda.memory_reserved() / 2**30
-    print(f"[MEM-MONITOR] {tag}  alloc={alloc:.2f}GiB  reserved={reserv:.2f}GiB", flush=True)
-    
-    # Also log to see if it shows up in the log files
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"[MEM-MONITOR] {tag}  alloc={alloc:.2f}GiB  reserved={reserv:.2f}GiB")
-    
-    # Optional: Get nvidia-smi process memory
-    try:
-        pid = os.getpid()
-        # Try Windows-compatible nvidia-smi command
-        out = subprocess.check_output(
-            ["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"],
-            text=True
-        ).strip()
-        for line in out.split('\n'):
-            if line.strip() and str(pid) in line:
-                used_mem = line.split(',')[-1].strip()
-                if used_mem.isdigit():
-                    print(f"[MEM-MONITOR] nvidia-smi used={int(used_mem)/1024:.2f}GiB", flush=True)
-                    logger.info(f"[MEM-MONITOR] nvidia-smi used={int(used_mem)/1024:.2f}GiB")
-                break
-    except Exception as e: 
-        print(f"[MEM-MONITOR] nvidia-smi failed: {e}", flush=True)
 
 
 def main(args):
@@ -191,23 +156,45 @@ def main(args):
             steps_per_epoch=steps_per_epoch,
         )
 
-        # Test output to verify code execution
-        if dist.get_rank() == 0:
-            print(f"[DEBUG] Starting training step {global_step}", flush=True)
-
-        # Memory monitoring at start of step
-        mem(f"step_{global_step}_start")
-
         with stats_tracker.record_timing("rollout"):
             if config.async_training:
                 batch = rollout.prepare_batch(train_dataloader, workflow=workflow)
             else:
                 batch = rollout.rollout_batch(next(data_generator), workflow=workflow)
 
-        # Memory monitoring after generation/rollout
-        mem(f"step_{global_step}_after_generate")
-
         batch = batch.to(actor.device)
+        
+        # # Print complete per-token version information
+        # print(f"\n[TOKEN VERSION DEBUG] Step {global_step}: Full batch analysis")
+        # versions = batch["versions"]
+        # print(f"[TOKEN VERSION DEBUG] Versions type: {type(versions)}")
+        # print(f"[TOKEN VERSION DEBUG] Versions shape: {versions.shape if hasattr(versions, 'shape') else 'N/A'}")
+        # print(f"[TOKEN VERSION DEBUG] Batch contains {len(versions)} sequences")
+        
+        # for seq_idx, seq_versions in enumerate(versions):
+        #     if hasattr(seq_versions, 'tolist'):
+        #         version_list = seq_versions.tolist()
+        #     else:
+        #         version_list = list(seq_versions)
+            
+        #     unique_versions = list(set(version_list))
+        #     print(f"[TOKEN VERSION DEBUG] Sequence {seq_idx}:")
+        #     print(f"  - Length: {len(version_list)} tokens")
+        #     print(f"  - Unique versions: {sorted(unique_versions)}")
+        #     print(f"  - Version diversity: {'YES' if len(unique_versions) > 1 else 'NO'}")
+            
+        #     if len(unique_versions) > 1:
+        #         # Find transition points
+        #         transitions = []
+        #         for i in range(1, len(version_list)):
+        #             if version_list[i] != version_list[i-1]:
+        #                 transitions.append((i, version_list[i-1], version_list[i]))
+        #         print(f"  - Version transitions at positions: {[t[0] for t in transitions]}")
+        #         for pos, old_v, new_v in transitions:
+        #             print(f"    Position {pos}: {old_v} -> {new_v}")
+            
+        # print(f"[TOKEN VERSION DEBUG] End of batch analysis\n")
+        
         # Create barrier to synchronize all rollout processes.
         dist.barrier(device_ids=[actor.device.index])
         torch.cuda.synchronize()
@@ -235,9 +222,6 @@ def main(args):
             actor.step_lr_scheduler()
             log_gpu_stats("ppo update")
 
-        # Memory monitoring after training step
-        mem(f"step_{global_step}_after_train_step")
-
         with stats_tracker.record_timing("update_weights"):
             rollout.pause()
             if dist.get_rank() == 0:
@@ -247,9 +231,11 @@ def main(args):
                 future.result()
             dist.barrier(device_ids=[actor.device.index])
             torch.cuda.synchronize()
-            rollout.resume()
             actor.set_version(global_step + 1)
             rollout.set_version(global_step + 1)
+            print(f"[VERSION DEBUG] Step {global_step}: After weight update, rollout version = {rollout.get_version()}")
+            rollout.resume()
+            
 
         with stats_tracker.record_timing("save"):
             saver.save(actor, epoch, step, global_step, tokenizer=tokenizer)
@@ -295,15 +281,6 @@ def main(args):
             )
 
         stats_logger.commit(epoch, step, global_step, stats)
-
-        # Memory monitoring at end of step
-        mem(f"step_{global_step}_end")
-        
-        # Optional: Force memory cleanup every few steps
-        if global_step % 5 == 0:
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-            mem(f"step_{global_step}_after_cleanup")
 
     stats_logger.close()
     eval_rollout.destroy()

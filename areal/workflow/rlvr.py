@@ -81,6 +81,12 @@ class RLVRWorkflow(RolloutWorkflow):
                 **data,
             )
             rewards.append(reward)
+
+            """ # Debug: Check tensor sizes before creating TensorDict
+            logger.warning(f"[DEBUG] Tensor sizes - seq: {len(seq)}, logprobs: {len(logprobs)}")
+            if hasattr(resp, 'proximal_logprobs_t'):
+                proxy_size = len([0.0] * resp.input_len + resp.proximal_logprobs_t)
+                logger.info(f"[DEBUG] Would-be proximal_logprobs_t size: {proxy_size}") """
             res = dict(
                 # unsqueeze to add an additional batch dimension
                 input_ids=torch.tensor(seq).unsqueeze(0),
