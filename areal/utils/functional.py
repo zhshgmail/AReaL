@@ -159,10 +159,10 @@ def ppo_actor_loss_fn(
         dual_clip_mask = torch.zeros_like(clip_mask)
     if proximal_logprobs_t is not None:
         behav_kl = proximal_logprobs_t - old_logprobs
-        # Quick comparison print without changing logic
         behav_kl_decoupled = proximal_logprobs - old_logprobs
     else:
         behav_kl = proximal_logprobs - old_logprobs
+        behav_kl_decoupled = behav_kl
     behav_imp_weight = behav_kl.exp()
     behav_imp_weight_decoupled = behav_kl_decoupled.exp()
     behav_mask = (
@@ -170,58 +170,46 @@ def ppo_actor_loss_fn(
         if behav_imp_weight_cap is not None
         else loss_mask
     )
+    behav_mask_vals = behav_mask.to(dtype=torch.bool)
     behav_kl = torch.where(behav_mask, behav_kl, 0.0)
     behav_imp_weight = torch.where(behav_mask, behav_imp_weight, 0.0)
-    # # Print comparison after mask processing
+
     # if proximal_logprobs_t is not None:
-    #     behav_kl_decoupled_masked = torch.where(behav_mask, behav_kl_decoupled, 0.0)
-    #     behav_imp_weight_decoupled_masked = torch.where(behav_mask, behav_imp_weight_decoupled, 0.0)
-    #     # 只在有效位上取值，避免 0 稀释
-    #     seg_vals  = behav_imp_weight[behav_mask]
-    #     seg_logw  = behav_kl[behav_mask]
-    #     dec_vals  = behav_imp_weight_decoupled_masked[behav_mask]
-    #     dec_logw  = behav_kl_decoupled_masked[behav_mask]
-
-    #     # 保护：若无有效位则跳过
+    #     seg_vals = behav_imp_weight.masked_select(behav_mask_vals)
+    #     dec_vals = behav_imp_weight_decoupled.masked_select(behav_mask_vals)
     #     if seg_vals.numel() > 0:
-    #         # 对数域更稳健
-    #         seg_mean_logw = seg_logw.mean().item()
-    #         seg_std_logw  = seg_logw.std(unbiased=False).item()
-    #         # ESS / N
-    #         seg_ess_frac  = (seg_vals.sum() ** 2 / (seg_vals.pow(2).sum() * seg_vals.numel())).item()
-    #         # 尾部占比与分位数
-    #         seg_tail_hi   = (seg_vals > 2.0).float().mean().item()
-    #         seg_tail_lo   = (seg_vals < 0.5).float().mean().item()
-    #         q = torch.tensor([0.5, 0.9, 0.99], device=seg_vals.device)
-    #         seg_p50, seg_p90, seg_p99 = torch.quantile(seg_vals, q).tolist()
-
+    #         seg_mean = seg_vals.mean().item()
+    #         seg_median = seg_vals.median().item()
+    #         seg_std = seg_vals.std(unbiased=False).item()
+    #         seg_abs_log = (seg_vals.log().abs()).mean().item()
+    #         seg_p90, seg_p99 = torch.quantile(
+    #             seg_vals, torch.tensor([0.9, 0.99], device=seg_vals.device)
+    #         ).tolist()
     #         print(
-    #             "[Segment w] "
-    #             f"logw_mean={seg_mean_logw:.4f} "
-    #             f"logw_std={seg_std_logw:.4f} "
-    #             f"ESS%={seg_ess_frac*100:.1f} "
-    #             f"P(w>2)={seg_tail_hi*100:.2f}% "
-    #             f"P(w<0.5)={seg_tail_lo*100:.2f}% "
-    #             f"p50/p90/p99={seg_p50:.3f}/{seg_p90:.3f}/{seg_p99:.3f}"
+    #             '[Segment w] ' +
+    #             f'ratio_mean={seg_mean:.4f} ' +
+    #             f'ratio_median={seg_median:.4f} ' +
+    #             f'ratio_std={seg_std:.4f} ' +
+    #             f'logabs_mean={seg_abs_log:.4f} ' +
+    #             f'ratio_p90={seg_p90:.4f} ' +
+    #             f'ratio_p99={seg_p99:.4f}'
     #         )
-
     #     if dec_vals.numel() > 0:
-    #         dec_mean_logw = dec_logw.mean().item()
-    #         dec_std_logw  = dec_logw.std(unbiased=False).item()
-    #         dec_ess_frac  = (dec_vals.sum() ** 2 / (dec_vals.pow(2).sum() * dec_vals.numel())).item()
-    #         dec_tail_hi   = (dec_vals > 2.0).float().mean().item()
-    #         dec_tail_lo   = (dec_vals < 0.5).float().mean().item()
-    #         q = torch.tensor([0.5, 0.9, 0.99], device=dec_vals.device)
-    #         dec_p50, dec_p90, dec_p99 = torch.quantile(dec_vals, q).tolist()
-
+    #         dec_mean = dec_vals.mean().item()
+    #         dec_median = dec_vals.median().item()
+    #         dec_std = dec_vals.std(unbiased=False).item()
+    #         dec_abs_log = (dec_vals.log().abs()).mean().item()
+    #         dec_p90, dec_p99 = torch.quantile(
+    #             dec_vals, torch.tensor([0.9, 0.99], device=dec_vals.device)
+    #         ).tolist()
     #         print(
-    #             "[Decoupled w] "
-    #             f"logw_mean={dec_mean_logw:.4f} "
-    #             f"logw_std={dec_std_logw:.4f} "
-    #             f"ESS%={dec_ess_frac*100:.1f} "
-    #             f"P(w>2)={dec_tail_hi*100:.2f}% "
-    #             f"P(w<0.5)={dec_tail_lo*100:.2f}% "
-    #             f"p50/p90/p99={dec_p50:.3f}/{dec_p90:.3f}/{dec_p99:.3f}"
+    #             '[Decoupled w] ' +
+    #             f'ratio_mean={dec_mean:.4f} ' +
+    #             f'ratio_median={dec_median:.4f} ' +
+    #             f'ratio_std={dec_std:.4f} ' +
+    #             f'logabs_mean={dec_abs_log:.4f} ' +
+    #             f'ratio_p90={dec_p90:.4f} ' +
+    #             f'ratio_p99={dec_p99:.4f}'
     #         )
     pg_loss = pg_loss * behav_imp_weight
     logging_loss = pg_loss.detach()

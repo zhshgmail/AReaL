@@ -2,12 +2,12 @@ experiment_name: gsm8k-grpo
 trial_name: trial0
 allocation_mode: sglang.d4p1t1+d4p1t1
 cluster:
-  fileroot: /home/data/bruceli/areal/experiments
+  fileroot: /home/ubuntu/data/brucewu/areal/experiments
   n_nodes: 1
   n_gpus_per_node: 8
   name_resolve:
     type: nfs
-    nfs_record_root: /home/data/bruceli/areal/name_resolve
+    nfs_record_root: /home/ubuntu/data/brucewu/areal/name_resolve
 seed: 1
 total_train_epochs: 10
 tokenizer_path: ${actor.path}
@@ -32,7 +32,7 @@ gconfig:
 actor:
   experiment_name: ${experiment_name}
   trial_name: ${trial_name}
-  path: /home/data/Qwen/Qwen2.5-1.5B-Instruct
+  path: /home/ubuntu/data/brucewu/hub/models--Qwen--Qwen2-1.5B-Instruct/snapshots/ba1cf1846d7df0a0591d6c00649f57e798519da8/
   init_from_scratch: false
   disable_dropout: true
   gradient_checkpointing: false
@@ -71,7 +71,7 @@ ref:
   disable_dropout: true
   dtype: ${actor.dtype}
   mb_spec:
-    max_tokens_per_mb: 4096
+    max_tokens_per_mb: 10240
   optimizer: null
   backend: fsdp
 
@@ -91,7 +91,7 @@ train_dataset:
   shuffle: true
   pin_memory: true
   num_workers: 4
-  path: /home/data/gsm8k
+  path: /home/ubuntu/data/brucewu/hub/datasets--openai--gsm8k/snapshots/e53f048856ff4f594e959d75785d2c2d37b678ee
   type: rl
 
 valid_dataset:
@@ -99,7 +99,7 @@ valid_dataset:
   shuffle: true
   pin_memory: true
   num_workers: 4
-  path: /home/data/gsm8k
+  path: /home/ubuntu/data/brucewu/hub/datasets--openai--gsm8k/snapshots/e53f048856ff4f594e959d75785d2c2d37b678ee
   type: rl
 
 # Utilities
