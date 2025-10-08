@@ -241,6 +241,8 @@ class PPOActor:
             scalars["use_dual_clip"] = 0
         if self.config.behav_imp_weight_cap is not None:
             scalars["behav_imp_weight_cap"] = self.config.behav_imp_weight_cap
+        if self.config.behav_imp_weight_floor is not None:
+            scalars["behav_imp_weight_floor"] = self.config.behav_imp_weight_floor
         stats_tracker.scalar(**scalars)
 
         global_stats = stats_tracker.export(reduce_group=self.engine.parallelism_group)
@@ -268,6 +270,7 @@ class PPOActor:
                     eps_clip=self.config.eps_clip,
                     c_clip=self.config.c_clip,
                     behav_imp_weight_cap=self.config.behav_imp_weight_cap,
+                    behav_imp_weight_floor=self.config.behav_imp_weight_floor,
                 ),
                 loss_weight_fn=lambda x: x["loss_mask"].count_nonzero(),
             )
@@ -304,6 +307,7 @@ def grpo_loss_fn(
     eps_clip: float,
     c_clip: float | None,
     behav_imp_weight_cap: float | None,
+    behav_imp_weight_floor: float | None,
 ):
     """Loss function for actor step, all inputs should be splitted into
     pipeline micro batches, returns loss and logging stats."""
@@ -312,7 +316,7 @@ def grpo_loss_fn(
     advantages = input_data["advantages"]
     loss_mask = input_data["loss_mask"].bool()
     prox_logp = input_data["prox_logp"]
-    
+
     # Get segment-wise proximal logprobs if available
     proximal_logprobs_t = input_data.get("proximal_logprobs_t", None)
     if proximal_logprobs_t is not None:
@@ -333,6 +337,7 @@ def grpo_loss_fn(
         proximal_logprobs=prox_logp,
         proximal_logprobs_t=proximal_logprobs_t,
         behav_imp_weight_cap=behav_imp_weight_cap,
+        behav_imp_weight_floor=behav_imp_weight_floor,
     )
 
     # Log training statistics

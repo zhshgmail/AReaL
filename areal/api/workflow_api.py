@@ -109,6 +109,568 @@ class WorkflowExecutor:
         self._effective_history = deque(maxlen=16)
         self._effective_sum = 0.0
 
+    def _calculate_staleness(
+        self,
+        versions: List[int],
+        loss_mask: List[int],
+        current_ver: int,
+        recompute_version: int = -1,
+    ) -> tuple[int, int, int]:
+        """Calculate staleness metrics for a sample.
+
+        Args:
+            versions: Version list from sample
+            loss_mask: Loss mask list from sample
+            current_ver: Current model version
+            recompute_version: Recompute version if sample was recomputed
+
+        Returns:
+            Tuple of (staleness, allow_staleness, max_version)
+        """
+        output_positions = [idx for idx, mask in enumerate(loss_mask) if mask]
+        output_versions = [versions[idx] for idx in output_positions if versions[idx] >= 0]
+
+        if not output_versions:
+            return (0, 1, -1)
+
+        max_version = max(output_versions)
+        min_version = min(output_versions)
+        recomputed = recompute_version >= 0
+
+        tail_staleness = current_ver - max_version
+        head_staleness = current_ver - min_version if recomputed else None
+        staleness = head_staleness if recomputed else tail_staleness
+
+        allow_staleness = 1
+        if recomputed and self.config.max_head_offpolicyness is not None:
+            allow_staleness = max(allow_staleness, int(self.config.max_head_offpolicyness))
+
+        return (staleness, allow_staleness, max_version)
+
+    def _is_sample_too_stale(self, td: TensorDict, current_ver: int) -> bool:
+        """Check if a sample exceeds staleness threshold.
+
+        Args:
+            td: TensorDict sample to check
+            current_ver: Current model version
+
+        Returns:
+            True if sample should be dropped due to staleness
+        """
+        try:
+            versions = td.get("versions", None)
+            loss_mask = td.get("loss_mask", None)
+            if versions is None or loss_mask is None:
+                return False  # Keep samples without version info
+
+            ver = versions[0].tolist()
+            lm_row = loss_mask[0]
+            if torch.is_tensor(lm_row):
+                lm = lm_row.tolist()
+            else:
+                lm = list(lm_row)
+
+            patched_ver = _extract_version(td.get(RECOMPUTE_VERSION_KEY, None))
+            staleness, allow_staleness, _ = self._calculate_staleness(
+                ver, lm, current_ver, patched_ver or -1
+            )
+
+            return staleness > allow_staleness
+        except Exception:
+            traceback.print_exc()
+            return False  # Keep on error
+
+    def _purge_stale_samples_from_queue(self, current_ver: int) -> None:
+        """Drain output queue and drop stale samples when version increases.
+
+        Args:
+            current_ver: Current model version
+        """
+        if current_ver <= self._last_purged_ver:
+            return  # Only purge when version increases
+
+        drained = 0
+        picked_prev = 0
+        dropped = 0
+        kept = 0
+        v0_picked = 0
+        v0_kept = 0
+        v0_dropped = 0
+        put_back_buf: List[TensorDict] = []
+
+        # Drain entire queue
+        while True:
+            try:
+                traj = self.output_queue.get_nowait()
+            except queue.Empty:
+                break
+
+            drained += 1
+            try:
+                if self._is_sample_too_stale(traj, current_ver):
+                    dropped += 1
+                    # Track v0 statistics
+                    versions = traj.get("versions", None)
+                    if versions is not None:
+                        ver = versions[0].tolist()
+                        loss_mask = traj.get("loss_mask", None)
+                        if loss_mask is not None:
+                            lm = loss_mask[0].tolist() if torch.is_tensor(loss_mask[0]) else list(loss_mask[0])
+                            output_positions = [idx for idx, mask in enumerate(lm) if mask]
+                            if output_positions:
+                                max_version = max([ver[idx] for idx in output_positions if ver[idx] >= 0], default=-1)
+                                if max_version == 0:
+                                    v0_dropped += 1
+                else:
+                    put_back_buf.append(traj)
+                    kept += 1
+                    # Track statistics for kept samples
+                    versions = traj.get("versions", None)
+                    if versions is not None:
+                        ver = versions[0].tolist()
+                        loss_mask = traj.get("loss_mask", None)
+                        if loss_mask is not None:
+                            lm = loss_mask[0].tolist() if torch.is_tensor(loss_mask[0]) else list(loss_mask[0])
+                            output_positions = [idx for idx, mask in enumerate(lm) if mask]
+                            output_versions = [ver[idx] for idx in output_positions if ver[idx] >= 0]
+                            if output_versions:
+                                max_version = max(output_versions)
+                                if max_version == 0:
+                                    v0_kept += 1
+                                if (current_ver - 1) in output_versions:
+                                    picked_prev += 1
+                                    if max_version == 0:
+                                        v0_picked += 1
+            except Exception:
+                put_back_buf.append(traj)  # Keep on error
+                traceback.print_exc()
+
+        # FIX BUG #5: Put items back with timeout to handle full queue
+        for item in put_back_buf:
+            try:
+                _ensure_recompute_key(item)
+                self.output_queue.put(item, timeout=1.0)
+            except queue.Full:
+                logger.error(
+                    f"Output queue remains full after version purge. "
+                    f"Queue size: {self.output_queue.qsize()}/{self.output_queue.maxsize}. "
+                    f"Please increase queue_size."
+                )
+                raise RuntimeError(
+                    "Output queue full when putting back after version purge. Please increase queue_size."
+                )
+
+        logger.info(
+            f"[QueuePurge] ver_switch to {current_ver}: drained={drained} "
+            f"picked_prev={picked_prev} dropped={dropped} kept={kept} "
+            f"cache_size={len(self.result_cache)} "
+            f"v0(picked/dropped/kept)={v0_picked}/{v0_dropped}/{v0_kept}"
+        )
+        self._last_purged_ver = current_ver
+
+    def _collect_samples_from_queue(
+        self,
+        count: int,
+        timeout: float,
+        start_time: float,
+        should_accept: Callable | None = None,
+    ) -> int:
+        """Collect samples from output queue into result_cache until reaching count.
+
+        Args:
+            count: Target number of samples in cache
+            timeout: Overall timeout in seconds
+            start_time: Start time from perf_counter()
+            should_accept: Optional filter function
+
+        Returns:
+            Number of samples collected in this call
+        """
+        collected = 0
+        while (
+            len(self.result_cache) < count
+            and not self.exiting.is_set()
+            and time.perf_counter() - start_time < timeout
+        ):
+            try:
+                result = self.output_queue.get(timeout=ROLLOUT_POLL_WAIT_TIME)
+                if result is not None and (should_accept is None or should_accept(result)):
+                    if self.config.enable_rollout_tracing:
+                        logger.info(
+                            f"Accept rollout result. cache_size/count = {len(self.result_cache)}/{count}"
+                        )
+                    result = result.clone()
+                    self.result_cache.append(result)
+                    collected += 1
+                elif result is not None:
+                    # FIX BUG #2: Decrement rollout_stat when should_accept rejects
+                    if self.config.enable_rollout_tracing:
+                        logger.info(f"Rollout is rejected by should_accept filter.")
+                    with self.lock:
+                        self.rollout_stat.accepted -= 1
+            except queue.Empty:
+                pass
+
+        return collected
+
+    def _filter_stale_from_cache(self, current_ver: int) -> int:
+        """Remove stale samples from result_cache.
+
+        Args:
+            current_ver: Current model version
+
+        Returns:
+            Number of samples dropped
+        """
+        filtered: List[TensorDict] = []
+        dropped_cache = 0
+
+        for td in self.result_cache:
+            if self._is_sample_too_stale(td, current_ver):
+                dropped_cache += 1
+            else:
+                filtered.append(td)
+
+        self.result_cache = filtered
+
+        if dropped_cache:
+            logger.info(f"[CacheFilter] dropped_cache={dropped_cache} size={len(self.result_cache)}")
+
+        return dropped_cache
+
+    def recompute_all_proximal_t(self) -> None:
+        """Recompute proximal_t for all v-1 samples before weight update.
+
+        This should be called RIGHT BEFORE update_weights() to ensure:
+        1. All in-progress rollouts are still at current version
+        2. All v-1 samples (in queue or cache) get recomputed
+        3. No samples miss their recompute window
+
+        Processes BOTH output_queue and result_cache.
+        """
+        current_ver = self.inference_engine.get_version()
+
+        # 1. Recompute samples in result_cache
+        cache_recomputed = self._recompute_cache_proximal_t(current_ver)
+
+        # 2. Recompute samples in output_queue
+        queue_recomputed = self._recompute_queue_proximal_t(current_ver)
+
+        total = cache_recomputed + queue_recomputed
+        if total > 0:
+            logger.info(
+                f"[Recompute] Total recomputed: {total} "
+                f"(cache: {cache_recomputed}, queue: {queue_recomputed}) at version {current_ver}"
+            )
+
+    def _recompute_cache_proximal_t(self, current_ver: int) -> int:
+        """Recompute proximal_t for samples in result_cache.
+
+        Args:
+            current_ver: Current model version
+
+        Returns:
+            Number of tokens recomputed
+        """
+        total_patched = 0
+        try:
+            if hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
+                for idx, td in enumerate(self.result_cache):
+                    patched = self._recompute_sample_proximal_t(td, current_ver, f"cache#{idx}")
+                    total_patched += patched
+        except Exception:
+            traceback.print_exc()
+        return total_patched
+
+    def _recompute_queue_proximal_t(self, current_ver: int) -> int:
+        """Recompute proximal_t for samples in output_queue.
+
+        Uses drain-process-putback strategy to avoid blocking background thread.
+        Multiple iterations ensure eventual consistency even with concurrent puts.
+
+        Args:
+            current_ver: Current model version
+
+        Returns:
+            Number of tokens recomputed
+        """
+        if not hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
+            return 0
+
+        total_patched = 0
+        max_iterations = 3
+
+        try:
+            for iteration in range(max_iterations):
+                # Drain queue into temporary list (queue.get_nowait is thread-safe)
+                temp_samples = []
+                while True:
+                    try:
+                        sample = self.output_queue.get_nowait()
+                        temp_samples.append(sample)
+                    except queue.Empty:
+                        break
+
+                if not temp_samples:
+                    break  # Queue empty, done
+
+                # Process samples (no lock needed - working on local list)
+                for idx, td in enumerate(temp_samples):
+                    try:
+                        patched = self._recompute_sample_proximal_t(td, current_ver, f"queue#{idx}")
+                        total_patched += patched
+                    except Exception:
+                        traceback.print_exc()
+                        # Keep sample even if recompute fails
+
+                # Put samples back into queue (queue.put_nowait is thread-safe)
+                for sample in temp_samples:
+                    try:
+                        self.output_queue.put_nowait(sample)
+                    except queue.Full:
+                        # Queue full, use blocking put with timeout
+                        try:
+                            self.output_queue.put(sample, timeout=1.0)
+                        except queue.Full:
+                            logger.error("[Recompute] Queue full during put-back, sample dropped!")
+
+                logger.debug(
+                    f"[Recompute] Iteration {iteration + 1}: processed {len(temp_samples)} samples from queue"
+                )
+        except Exception:
+            traceback.print_exc()
+
+        return total_patched
+
+    def _recompute_sample_proximal_t(self, td: TensorDict, current_ver: int, sample_id: str = "") -> int:
+        """Recompute proximal_t for a single sample.
+
+        Args:
+            td: TensorDict sample
+            current_ver: Current model version
+            sample_id: Identifier for logging
+
+        Returns:
+            Number of tokens recomputed
+        """
+        try:
+            input_ids = td.get("input_ids", None)
+            versions = td.get("versions", None)
+            loss_mask = td.get("loss_mask", None)
+            prox = td.get("proximal_logprobs_t", None)
+            if (
+                input_ids is None
+                or versions is None
+                or loss_mask is None
+                or prox is None
+            ):
+                return 0
+
+            ids = input_ids[0].tolist()
+            ver = versions[0].tolist()
+            lm = loss_mask[0].tolist()
+            attn_mask = td.get("attention_mask", None)
+            valid_len = len(ids)
+
+            try:
+                if attn_mask is not None:
+                    mask_row = attn_mask[0]
+                    if torch.is_tensor(mask_row):
+                        valid_len = min(valid_len, int(mask_row.sum().item()))
+                    else:
+                        valid_len = min(valid_len, int(sum(mask_row)))
+            except Exception:
+                traceback.print_exc()
+
+            valid_len = min(valid_len, len(ver), len(lm))
+            if valid_len <= 0:
+                return 0
+
+            lm_valid = lm[:valid_len]
+            output_positions = [idx for idx, mask in enumerate(lm_valid) if mask]
+            out_len = len(output_positions)
+            if out_len == 0:
+                return 0
+
+            first_output_idx = output_positions[0]
+            start_index = max(0, first_output_idx - 1)
+            need_positions = [
+                (pos_idx, seq_idx)
+                for pos_idx, seq_idx in enumerate(output_positions)
+                if ver[seq_idx] == current_ver - 1
+            ]
+
+            if not need_positions:
+                return 0
+
+            # Log version histogram for debugging
+            try:
+                seg = [ver[pos] for pos in output_positions]
+                hist = {}
+                for v in seg:
+                    hist[v] = hist.get(v, 0) + 1
+                hist_items = sorted(hist.items())
+                logger.debug(
+                    f"[Recompute] {sample_id}: version_hist={dict(hist_items)}"
+                )
+            except Exception:
+                traceback.print_exc()
+
+            latest_out_logp = self.inference_engine.recompute_output_logprobs_sync(
+                input_ids=ids,
+                start_index=start_index,
+            )
+
+            patched_here = 0
+            max_required_offset = output_positions[-1] - start_index - 1
+            if max_required_offset >= len(latest_out_logp):
+                logger.warning(
+                    f"[Recompute] {sample_id}: length mismatch, required idx {max_required_offset} "
+                    f"but got {len(latest_out_logp)} logprobs"
+                )
+                return 0
+
+            for pos_idx, seq_idx in need_positions:
+                rel_offset = seq_idx - start_index - 1
+                if rel_offset < 0 or rel_offset >= len(latest_out_logp):
+                    logger.warning(
+                        f"[Recompute] {sample_id}: rel_offset={rel_offset} out_of_range "
+                        f"for logprobs len={len(latest_out_logp)}"
+                    )
+                    continue
+                prox[0, seq_idx] = float(latest_out_logp[rel_offset])
+                patched_here += 1
+
+            if patched_here == 0:
+                return 0
+
+            patched_value = torch.full_like(
+                versions[:, :1], int(current_ver), dtype=torch.int64
+            )
+            td.set(RECOMPUTE_VERSION_KEY, patched_value)
+            return patched_here
+        except Exception:
+            traceback.print_exc()
+            return 0
+
+    def _recompute_stale_logprobs(self, current_ver: int) -> None:
+        """DEPRECATED: Use recompute_all_proximal_t() instead.
+
+        This method is kept for backward compatibility but should not be used.
+        The new approach is to call recompute_all_proximal_t() before weight updates.
+
+        Args:
+            current_ver: Current model version
+        """
+        try:
+            total_candidates = 0
+            total_patched = 0
+            if hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
+                for idx, td in enumerate(self.result_cache):
+                    try:
+                        input_ids = td.get("input_ids", None)
+                        versions = td.get("versions", None)
+                        loss_mask = td.get("loss_mask", None)
+                        prox = td.get("proximal_logprobs_t", None)
+                        if (
+                            input_ids is None
+                            or versions is None
+                            or loss_mask is None
+                            or prox is None
+                        ):
+                            continue
+
+                        ids = input_ids[0].tolist()
+                        ver = versions[0].tolist()
+                        lm = loss_mask[0].tolist()
+                        attn_mask = td.get("attention_mask", None)
+                        valid_len = len(ids)
+
+                        try:
+                            if attn_mask is not None:
+                                mask_row = attn_mask[0]
+                                if torch.is_tensor(mask_row):
+                                    valid_len = min(valid_len, int(mask_row.sum().item()))
+                                else:
+                                    valid_len = min(valid_len, int(sum(mask_row)))
+                        except Exception:
+                            traceback.print_exc()
+
+                        valid_len = min(valid_len, len(ver), len(lm))
+                        if valid_len <= 0:
+                            continue
+
+                        lm_valid = lm[:valid_len]
+                        output_positions = [idx for idx, mask in enumerate(lm_valid) if mask]
+                        out_len = len(output_positions)
+                        if out_len == 0:
+                            continue
+
+                        first_output_idx = output_positions[0]
+                        start_index = max(0, first_output_idx - 1)
+                        need_positions = [
+                            (pos_idx, seq_idx)
+                            for pos_idx, seq_idx in enumerate(output_positions)
+                            if ver[seq_idx] == current_ver - 1
+                        ]
+
+                        if not need_positions:
+                            continue
+
+                        total_candidates += 1
+
+                        # Log version histogram for debugging
+                        try:
+                            seg = [ver[pos] for pos in output_positions]
+                            hist = {}
+                            for v in seg:
+                                hist[v] = hist.get(v, 0) + 1
+                            hist_items = sorted(hist.items())
+                            logger.info(
+                                f"[Recompute] sample#{idx}: version_hist={dict(hist_items)}"
+                            )
+                        except Exception:
+                            traceback.print_exc()
+
+                        latest_out_logp = self.inference_engine.recompute_output_logprobs_sync(
+                            input_ids=ids,
+                            start_index=start_index,
+                        )
+
+                        patched_here = 0
+                        max_required_offset = output_positions[-1] - start_index - 1
+                        if max_required_offset >= len(latest_out_logp):
+                            logger.warning(
+                                f"[Recompute] sample#{idx}: length mismatch, required idx {max_required_offset} "
+                                f"but got {len(latest_out_logp)} logprobs"
+                            )
+                            continue
+
+                        for pos_idx, seq_idx in need_positions:
+                            rel_offset = seq_idx - start_index - 1
+                            if rel_offset < 0 or rel_offset >= len(latest_out_logp):
+                                logger.warning(
+                                    f"[Recompute] sample#{idx}: rel_offset={rel_offset} out_of_range "
+                                    f"for logprobs len={len(latest_out_logp)}"
+                                )
+                                continue
+                            prox[0, seq_idx] = float(latest_out_logp[rel_offset])
+                            patched_here += 1
+
+                        if patched_here == 0:
+                            continue
+
+                        patched_value = torch.full_like(
+                            versions[:, :1], int(current_ver), dtype=torch.int64
+                        )
+                        td.set(RECOMPUTE_VERSION_KEY, patched_value)
+                        total_patched += patched_here
+                    except Exception:
+                        traceback.print_exc()
+                        continue
+        except Exception:
+            traceback.print_exc()
+
     def initialize(self):
         self.rollout_tasks: Dict[str, asyncio.Task] = {}
         self.rollout_thread = threading.Thread(
@@ -307,339 +869,95 @@ class WorkflowExecutor:
         timeout: float | None = None,
         should_accept: Callable | None = None,
     ) -> TensorDict:
+        """Wait for and return a batch of rollout samples.
+
+        This method orchestrates the complete sample collection process:
+        1. Purges stale samples from queue when version increases
+        2. Collects samples from queue into cache
+        3. Filters stale samples from cache
+        4. Re-collects if needed after filtering (BUG #1 fix)
+        5. Returns requested number of samples
+
+        NOTE: Recompute logic has been moved out of wait() and should be called
+        separately via recompute_all_proximal_t() BEFORE weight updates.
+
+        All 6 identified bugs have been fixed in this refactored version.
+
+        Args:
+            count: Number of samples to return
+            timeout: Maximum time to wait in seconds (default: 7 days)
+            should_accept: Optional filter function for samples
+
+        Returns:
+            Concatenated batch of TensorDict samples
+
+        Raises:
+            TimeoutError: If timeout exceeded before collecting enough samples
+            RuntimeError: If executor is exiting
+        """
         tik = time.perf_counter()
-        accepted = len(self.result_cache)
         timeout = timeout or float(7 * 24 * 3600)
 
-        # Version-switch purge: only when version increases, drain queue once and classify
-        try:
-            current_ver = self.inference_engine.get_version()
-            if current_ver > self._last_purged_ver:
-                drained = 0
-                picked_prev = 0
-                dropped = 0
-                kept = 0
-                v0_picked = 0
-                v0_kept = 0
-                v0_dropped = 0
-                put_back_buf: List[TensorDict] = []
-                while True:
-                    try:
-                        traj = self.output_queue.get_nowait()
-                    except queue.Empty:
-                        break
-                    drained += 1
-                    try:
-                        versions = traj.get("versions", None)
-                        loss_mask = traj.get("loss_mask", None)
-                        if versions is None or loss_mask is None:
-                            put_back_buf.append(traj)
-                            continue
-                        ver = versions[0].tolist()
-                        lm_row = loss_mask[0]
-                        if torch.is_tensor(lm_row):
-                            lm = lm_row.tolist()
-                        else:
-                            lm = list(lm_row)
-                        output_positions = [idx for idx, mask in enumerate(lm) if mask]
-                        output_versions = [ver[idx] for idx in output_positions if ver[idx] >= 0]
-                        if not output_versions:
-                            put_back_buf.append(traj)
-                            continue
-                        max_version = max(output_versions)
-                        min_version = min(output_versions)
-                        patched_ver = _extract_version(traj.get(RECOMPUTE_VERSION_KEY, None))
-                        recomputed = patched_ver is not None and patched_ver >= 0
-                        tail_staleness = current_ver - max_version
-                        head_staleness = current_ver - min_version if recomputed else None
-                        staleness = head_staleness if recomputed else tail_staleness
-                        allow_staleness = 1
-                        if recomputed and self.config.max_head_offpolicyness is not None:
-                            allow_staleness = max(
-                                allow_staleness, int(self.config.max_head_offpolicyness)
-                            )
-                        contains_prev = (current_ver - 1) in output_versions
-                        if staleness > allow_staleness:
-                            dropped += 1
-                            if max_version == 0:
-                                v0_dropped += 1
-                        else:
-                            put_back_buf.append(traj)
-                            kept += 1
-                            if max_version == 0:
-                                v0_kept += 1
-                            if contains_prev:
-                                picked_prev += 1
-                                if max_version == 0:
-                                    v0_picked += 1
-                    except Exception:
-                        put_back_buf.append(traj)
-                        traceback.print_exc()
-                for item in put_back_buf:
-                    try:
-                        _ensure_recompute_key(item)
-                        self.output_queue.put_nowait(item)
-                    except queue.Full:
-                        _ensure_recompute_key(item)
-                        self.result_cache.append(item)
-                logger.info(
-                    f"[QueuePurge] ver_switch to {current_ver}: drained={drained} picked_prev={picked_prev} dropped={dropped} kept={kept} cache_size={len(self.result_cache)} v0(picked/dropped/kept)={v0_picked}/{v0_dropped}/{v0_kept}"
-                )
-                self._last_purged_ver = current_ver
-        except Exception:
-            traceback.print_exc()
+        # FIX BUG #3 & #4: Read version once at start for consistency across all operations
+        current_ver = self.inference_engine.get_version()
 
-        accepted = len(self.result_cache)
+        # FIX BUG #6: Check timeout before expensive operations
+        if time.perf_counter() - tik >= timeout:
+            raise TimeoutError(
+                f"Timed out before purge, only have {len(self.result_cache)} samples in cache."
+            )
 
-        while (
-            accepted < count
-            and not self.exiting.is_set()
-            and time.perf_counter() - tik < timeout
-        ):
-            try:
-                result = self.output_queue.get(timeout=ROLLOUT_POLL_WAIT_TIME)
-                if result is not None and (
-                    should_accept is None or should_accept(result)
-                ):
-                    if self.config.enable_rollout_tracing:
-                        logger.info(
-                            f"Accept rollout result. accepted/count = {accepted}/{count}"
-                        )
-                    result = result.clone()
-                    _ensure_recompute_key(result)
-                    self.result_cache.append(result)
-                    accepted += 1
-                else:
-                    if self.config.enable_rollout_tracing:
-                        logger.info(f"Rollout is rejected.")
-                    with self.lock:
-                        self.rollout_stat.accepted -= 1
-            except queue.Empty:
-                pass
+        # Step 1: Purge stale samples from queue (uses consistent current_ver)
+        self._purge_stale_samples_from_queue(current_ver)
+
+        # Step 2: Collect samples from queue into cache
+        self._collect_samples_from_queue(count, timeout, tik, should_accept)
+
+        # Check if we have enough after initial collection
         if self.exiting.is_set():
             raise RuntimeError("Rollout engine is exiting, cannot wait for results.")
-        if accepted < count:
+        if len(self.result_cache) < count:
             raise TimeoutError(
-                f"Timed out waiting for {count} rollouts, " f"only received {accepted}."
+                f"Timed out waiting for {count} rollouts, only received {len(self.result_cache)}."
             )
+
         if self.config.enable_rollout_tracing:
             logger.info(
-                f"Rollout results are ready! accepted/count = {accepted}/{count}"
+                f"Rollout results are ready! cache_size/count = {len(self.result_cache)}/{count}"
             )
-        # Non-blocking recompute across the whole cache: for any cached sample,
-        # if there exist output tokens with version == current_version - 1,
-        # recompute once (prefill on full output span) and patch exactly those
-        # positions in proximal_logprobs_t.
-        try:
-            current_ver = self.inference_engine.get_version()
-            total_candidates = 0
-            total_patched = 0
-            if hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
-                for idx, td in enumerate(self.result_cache):
-                    try:
-                        input_ids = td.get("input_ids", None)
-                        versions = td.get("versions", None)
-                        loss_mask = td.get("loss_mask", None)
-                        prox = td.get("proximal_logprobs_t", None)
-                        if (
-                            input_ids is None
-                            or versions is None
-                            or loss_mask is None
-                            or prox is None
-                        ):
-                            continue
-                        ids = input_ids[0].tolist()
-                        ver = versions[0].tolist()
-                        lm = loss_mask[0].tolist()
-                        attn_mask = td.get("attention_mask", None)
-                        valid_len = len(ids)
-                        try:
-                            if attn_mask is not None:
-                                mask_row = attn_mask[0]
-                                if torch.is_tensor(mask_row):
-                                    valid_len = min(valid_len, int(mask_row.sum().item()))
-                                else:
-                                    valid_len = min(valid_len, int(sum(mask_row)))
-                        except Exception:
-                            traceback.print_exc()
-                        valid_len = min(valid_len, len(ver), len(lm))
-                        if valid_len <= 0:
-                            continue
-                        lm_valid = lm[:valid_len]
-                        output_positions = [idx for idx, mask in enumerate(lm_valid) if mask]
-                        out_len = len(output_positions)
-                        if out_len == 0:
-                            continue
-                        first_output_idx = output_positions[0]
-                        start_index = max(0, first_output_idx - 1)
-                        need_positions = [
-                            (pos_idx, seq_idx)
-                            for pos_idx, seq_idx in enumerate(output_positions)
-                            if ver[seq_idx] == current_ver - 1
-                        ]
-                        v_last = ver[output_positions[-1]]
-                        if need_positions:
-                            total_candidates += 1
-                            try:
-                                seg = [ver[pos] for pos in output_positions]
-                                hist = {}
-                                for v in seg:
-                                    hist[v] = hist.get(v, 0) + 1
-                                hist_items = sorted(hist.items())
-                                logger.info(
-                                    f"[Recompute] sample#{idx}: version_hist={dict(hist_items)}"
-                                )
-                                if v_last == 0:
-                                    try:
-                                        idx_last = output_positions[-1]
-                                        val_last = ver[idx_last]
-                                        logger.warning(
-                                            f"[Recompute] sample#{idx}: v_last==0 sanity idx={idx_last} versions[idx]={val_last}"
-                                        )
-                                    except Exception:
-                                        traceback.print_exc()
-                            except Exception:
-                                traceback.print_exc()
-                        if not need_positions:
-                            continue
-                        latest_out_logp = self.inference_engine.recompute_output_logprobs_sync(
-                            input_ids=ids,
-                            start_index=start_index,
-                        )
-                        patched_here = 0
-                        max_required_offset = output_positions[-1] - start_index - 1
-                        if max_required_offset >= len(latest_out_logp):
-                            raise RuntimeError(
-                                f"Recompute length mismatch: required idx {max_required_offset} but got {len(latest_out_logp)} logprobs"
-                            )
-                        for pos_idx, seq_idx in need_positions:
-                            rel_offset = seq_idx - start_index - 1
-                            if rel_offset < 0 or rel_offset >= len(latest_out_logp):
-                                logger.warning(
-                                    f"[Recompute] sample#{idx}: rel_offset={rel_offset} out_of_range for logprobs len={len(latest_out_logp)}"
-                                )
-                                continue
-                            prox[0, seq_idx] = float(latest_out_logp[rel_offset])
-                            patched_here += 1
-                        if patched_here == 0:
-                            continue
-                        patched_value = torch.full_like(
-                            versions[:, :1], int(current_ver), dtype=torch.int64
-                        )
-                        td.set(RECOMPUTE_VERSION_KEY, patched_value)
-                        total_patched += patched_here
-                    except Exception:
-                        traceback.print_exc()
-                        continue
-        except Exception:
-            traceback.print_exc()
 
-        
+        # Step 3: Recompute removed - now done before weight update via recompute_all_proximal_t()
 
-        # After patching the cache, drop too-old samples in cache (v_last <= current-2), then return results
-        try:
-            current_ver = self.inference_engine.get_version()
-            filtered: List[TensorDict] = []
-            dropped_cache = 0
-            for td in self.result_cache:
-                try:
-                    versions = td.get("versions", None)
-                    loss_mask = td.get("loss_mask", None)
-                    if versions is None or loss_mask is None:
-                        filtered.append(td)
-                        continue
-                    ver = versions[0].tolist()
-                    lm_row = loss_mask[0]
-                    if torch.is_tensor(lm_row):
-                        lm = lm_row.tolist()
-                    else:
-                        lm = list(lm_row)
-                    output_positions = [idx for idx, mask in enumerate(lm) if mask]
-                    output_versions = [ver[idx] for idx in output_positions if ver[idx] >= 0]
-                    if not output_versions:
-                        filtered.append(td)
-                        continue
-                    max_version = max(output_versions)
-                    min_version = min(output_versions)
-                    patched_ver = _extract_version(td.get(RECOMPUTE_VERSION_KEY, None))
-                    recomputed = patched_ver is not None and patched_ver >= 0
-                    tail_staleness = current_ver - max_version
-                    head_staleness = current_ver - min_version if recomputed else None
-                    staleness = head_staleness if recomputed else tail_staleness
-                    allow_staleness = 1
-                    if recomputed and self.config.max_head_offpolicyness is not None:
-                        allow_staleness = max(
-                            allow_staleness, int(self.config.max_head_offpolicyness)
-                        )
-                    if staleness > allow_staleness:
-                        dropped_cache += 1
-                    else:
-                        filtered.append(td)
-                except Exception:
-                    filtered.append(td)
-                    traceback.print_exc()
-            self.result_cache = filtered
-            cache_debug_entries: List[str] = []
-            for idx, td in enumerate(self.result_cache):
-                try:
-                    versions = td.get("versions", None)
-                    loss_mask = td.get("loss_mask", None)
-                    prox = td.get("proximal_logprobs_t", None)
-                    if versions is None or loss_mask is None:
-                        cache_debug_entries.append(f"idx={idx}:missing_fields")
-                        continue
-                    ver = versions[0].tolist()
-                    lm_row = loss_mask[0]
-                    if torch.is_tensor(lm_row):
-                        lm = lm_row.tolist()
-                    else:
-                        lm = list(lm_row)
-                    output_positions = [idx_pos for idx_pos, mask in enumerate(lm) if mask]
-                    output_versions = [ver[idx_pos] for idx_pos in output_positions if ver[idx_pos] >= 0]
-                    if not output_versions:
-                        cache_debug_entries.append(f"idx={idx}:no_valid_outputs")
-                        continue
-                    patched_ver = _extract_version(
-                        td.get(RECOMPUTE_VERSION_KEY, None)
-                    )
-                    recomputed = patched_ver is not None and patched_ver >= 0
-                    last_output_version = None
-                    for pos in reversed(output_positions):
-                        val = ver[pos]
-                        if val >= 0:
-                            last_output_version = val
-                            break
-                    max_version = max(output_versions)
-                    min_version = min(output_versions)
-                    tail_staleness = current_ver - max_version
-                    head_staleness = current_ver - min_version if recomputed else None
-                    staleness = head_staleness if recomputed else tail_staleness
-                    allow_staleness = 1
-                    if recomputed and self.config.max_head_offpolicyness is not None:
-                        allow_staleness = max(
-                            allow_staleness, int(self.config.max_head_offpolicyness)
-                        )
-                    hist: Dict[int, int] = {}
-                    for v in output_versions:
-                        hist[v] = hist.get(v, 0) + 1
-                    hist_items = ", ".join(f"{k}:{hist[k]}" for k in sorted(hist))
-                    prox_shape = tuple(prox.shape) if prox is not None else None
-                    cache_debug_entries.append(
-                        f"idx={idx}:last_out={last_output_version} first_out={min_version} max_out={max_version} patched={patched_ver} recomputed={recomputed} head_staleness={head_staleness} tail_staleness={tail_staleness} allow={allow_staleness} used_staleness={staleness} prox_shape={prox_shape} hist={{ {hist_items} }}"
-                    )
-                except Exception:
-                    cache_debug_entries.append(f"idx={idx}:error")
-                    traceback.print_exc()
-            if cache_debug_entries:
-                logger.info(
-                    f"[CacheState] size={len(self.result_cache)} "
-                    + "; ".join(cache_debug_entries)
+        # Step 4: Filter stale samples from cache (uses same current_ver)
+        dropped = self._filter_stale_from_cache(current_ver)
+
+        # FIX BUG #1: After cache filtering, if we don't have enough samples, collect more
+        # This is the simplified fix - just reuse _collect_samples_from_queue!
+        if len(self.result_cache) < count:
+            remaining_timeout = timeout - (time.perf_counter() - tik)
+            if remaining_timeout <= 0:
+                raise TimeoutError(
+                    f"Timed out after cache filtering: need {count}, have {len(self.result_cache)}. "
+                    f"{dropped} samples were dropped as too stale."
                 )
-            if dropped_cache:
-                logger.info(f"[CacheFilter] dropped_cache={dropped_cache} size={len(self.result_cache)}")
-        except Exception:
-            traceback.print_exc()
 
+            logger.info(
+                f"[CacheFilter] After filtering, need {count - len(self.result_cache)} more samples. "
+                f"Current cache: {len(self.result_cache)}, requested: {count}"
+            )
+
+            # Collect remaining samples (reuses same collection logic!)
+            self._collect_samples_from_queue(count, timeout, tik, should_accept)
+
+            # Final check after re-collection
+            if len(self.result_cache) < count:
+                if self.exiting.is_set():
+                    raise RuntimeError("Rollout engine is exiting, cannot wait for results.")
+                raise TimeoutError(
+                    f"Timed out after re-collection: need {count}, have {len(self.result_cache)}."
+                )
+
+        # Step 5: Return results
         results, self.result_cache = (
             self.result_cache[:count],
             self.result_cache[count:],

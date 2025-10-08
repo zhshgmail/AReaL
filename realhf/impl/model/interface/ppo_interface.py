@@ -65,6 +65,7 @@ def _ppo_actor_loss_from_model_outputs(
     eps_clip: float,  # const
     c_clip: float | None,
     behav_imp_weight_cap: float | None,
+    behav_imp_weight_floor: float | None,
     early_stop_imp_ratio: Optional[float],  # const
     early_stop_kl: Optional[float],  # const
     temperature: Optional[float] = 1,
@@ -99,6 +100,7 @@ def _ppo_actor_loss_from_model_outputs(
         c_clip=c_clip,
         proximal_logprobs=input_.data.get("prox_logp", None),
         behav_imp_weight_cap=behav_imp_weight_cap,
+        behav_imp_weight_floor=behav_imp_weight_floor,
     )
 
     entropy = calc_entropy(logits=logits, cu_seqlens=cu_seqlens)
@@ -222,6 +224,7 @@ class PPOActorInterface(model_api.ModelInterface):
     eps_clip: float = 0.2
     c_clip: Optional[float] = None
     behav_imp_weight_cap: Optional[float] = None
+    behav_imp_weight_floor: Optional[float] = None
     value_eps_clip: float = 0.2
     max_reward_clip: float = 5.0
 
@@ -778,6 +781,8 @@ class PPOActorInterface(model_api.ModelInterface):
                 scalars["use_dual_clip"] = 0
             if self.behav_imp_weight_cap is not None:
                 scalars["behav_imp_weight_cap"] = self.behav_imp_weight_cap
+            if self.behav_imp_weight_floor is not None:
+                scalars["behav_imp_weight_floor"] = self.behav_imp_weight_floor
             stats_tracker.scalar(**scalars)
 
             global_stats = stats_tracker.export()
@@ -795,6 +800,7 @@ class PPOActorInterface(model_api.ModelInterface):
                     early_stop_kl=self.early_stop_kl,
                     c_clip=self.c_clip,
                     behav_imp_weight_cap=self.behav_imp_weight_cap,
+                    behav_imp_weight_floor=self.behav_imp_weight_floor,
                     temperature=self.gconfig.temperature,
                 )
 

@@ -180,6 +180,7 @@ class RemoteSGLangEngine(InferenceEngine):
         accumulated_output_logprobs = []
         accumulated_versions = []  # Per-token policy version
         proximal_logprobs_t = []
+        prompt_len = len(req.input_ids)  # Store original prompt length for proximal_t updates
 
         # A single "rid" shares the same sever to allow KV cache reuse
         if req.rid in self.rid_to_address:
@@ -234,15 +235,51 @@ class RemoteSGLangEngine(InferenceEngine):
             # Parse response
             output_tokens = [x[1] for x in meta_info["output_token_logprobs"]]
             output_logprobs = [x[0] for x in meta_info["output_token_logprobs"]]
-             
-            # For segment-wise PPO: extract input logprobs similar to output logprobs
-            input_logprobs = [x[0] for x in meta_info["input_token_logprobs"]]
-            proximal_logprobs_t.extend(input_logprobs[1:])
-            # Update accumulated outputs  
+
+            # For segment-wise PPO: Handle proximal_logprobs_t correctly
+            if len(accumulated_output_tokens) == 0:
+                # First iteration: No previous output to update
+                # proximal_t for new tokens will be their generation logprobs (appended below)
+                pass
+            else:
+                # Abort-resume iteration: Update proximal_t for previously generated tokens
+                # input_logprobs contains logprobs under NEW policy for tokens after logprob_start_len
+                input_logprobs = [x[0] for x in meta_info["input_token_logprobs"]]
+
+                # logprob_start_len was set to len(input_ids) - 1 in previous iteration
+                # So input_logprobs[0] is for position (logprob_start_len)
+                # input_logprobs[1] is for position (logprob_start_len + 1), etc.
+
+                # We want logprobs for previous output tokens (positions prompt_len onwards)
+                # Previous iteration set logprob_start_len = prompt_len + prev_output_len - 1
+                # So input_logprobs structure:
+                # [0]: logprob for position (prompt_len + prev_output_len - 1) - last prompt token or first output
+                # [1:]: logprobs for subsequent positions
+
+                # Calculate how many previous output tokens we have
+                prev_output_len = len(accumulated_output_tokens)
+
+                # input_logprobs should contain at least prev_output_len + 1 entries
+                # (one for the position before, then one for each output token)
+                # We want entries [1:1+prev_output_len] which correspond to the previous output
+                if len(input_logprobs) >= prev_output_len + 1:
+                    # Extract proximal_t for previous output tokens (under new policy)
+                    prev_output_proximal_t = input_logprobs[1:1+prev_output_len]
+
+                    # REPLACE (not extend) the existing proximal_t values
+                    for i, logprob in enumerate(prev_output_proximal_t):
+                        if i < len(proximal_logprobs_t):
+                            proximal_logprobs_t[i] = logprob
+
+            # Accumulate new output tokens
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
             # Track the current policy version for each generated token
             accumulated_versions.extend([self._version] * len(output_tokens))
+
+            # For newly generated tokens, proximal_t is their generation logprobs (for now)
+            # These will be updated in next abort-resume iteration if policy changes
+            proximal_logprobs_t.extend(output_logprobs)
 
             # Set logprob_start_len to current input length, then update input_ids
             payload["logprob_start_len"] = len(payload["input_ids"]) - 1
@@ -251,7 +288,8 @@ class RemoteSGLangEngine(InferenceEngine):
 
         latency = time.perf_counter() - start_time
 
-        proximal_logprobs_t.extend(output_logprobs)
+        # Note: proximal_logprobs_t now has correct length (same as accumulated_output_tokens)
+        # No need to extend again
 
         
 
@@ -329,6 +367,18 @@ class RemoteSGLangEngine(InferenceEngine):
         workflow_builder: Optional[Callable] = None,
     ) -> None:
         return self.workflow_executor.submit(data, workflow, workflow_builder)
+
+    def recompute_all_proximal_t(self) -> None:
+        """Recompute proximal_t for all v-1 samples before weight update.
+
+        This should be called RIGHT BEFORE update_weights() in the training loop.
+        It ensures all samples with version = current_version - 1 get their
+        proximal_logprobs_t recomputed under the current policy.
+
+        This method processes BOTH the output queue and result cache to ensure
+        no samples miss their recompute window.
+        """
+        return self.workflow_executor.recompute_all_proximal_t()
 
     def wait(
         self,

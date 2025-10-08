@@ -57,6 +57,7 @@ def actor_loss_fn(
     c_clip: Optional[float] = None,
     proximal_logprobs: Optional[torch.FloatTensor] = None,
     behav_imp_weight_cap: Optional[torch.FloatTensor] = None,
+    behav_imp_weight_floor: Optional[torch.FloatTensor] = None,
 ) -> Tuple[torch.Tensor, Dict]:
     """Compute PPO actor loss function.
 
@@ -118,12 +119,14 @@ def actor_loss_fn(
     if proximal_logprobs is not None:
         behav_kl = proximal_logprobs - old_logprobs
         behav_imp_weight = behav_kl.exp()
+
+        # Build mask with optional cap and floor for symmetric/asymmetric clipping
+        behav_mask = loss_mask
         if behav_imp_weight_cap is not None:
-            behav_mask = (behav_imp_weight <= behav_imp_weight_cap).logical_and(
-                loss_mask
-            )
-        else:
-            behav_mask = loss_mask
+            behav_mask = (behav_imp_weight <= behav_imp_weight_cap).logical_and(behav_mask)
+        if behav_imp_weight_floor is not None:
+            behav_mask = (behav_imp_weight >= behav_imp_weight_floor).logical_and(behav_mask)
+
         behav_kl = torch.where(behav_mask, behav_kl, 0.0)
         behav_imp_weight = torch.where(behav_mask, behav_imp_weight, 0.0)
         pg_loss = pg_loss * behav_imp_weight

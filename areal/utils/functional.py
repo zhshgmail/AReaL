@@ -129,6 +129,7 @@ def ppo_actor_loss_fn(
     proximal_logprobs_t: Optional[torch.Tensor] = None,
     c_clip: Optional[float] = None,
     behav_imp_weight_cap: Optional[float] = None,
+    behav_imp_weight_floor: Optional[float] = None,
 ) -> Tuple[torch.Tensor, Dict]:
     """
     Params:
@@ -165,11 +166,14 @@ def ppo_actor_loss_fn(
         behav_kl_decoupled = behav_kl
     behav_imp_weight = behav_kl.exp()
     behav_imp_weight_decoupled = behav_kl_decoupled.exp()
-    behav_mask = (
-        (behav_imp_weight <= behav_imp_weight_cap).logical_and(loss_mask)
-        if behav_imp_weight_cap is not None
-        else loss_mask
-    )
+
+    # Build mask with optional cap and floor for symmetric/asymmetric clipping
+    behav_mask = loss_mask
+    if behav_imp_weight_cap is not None:
+        behav_mask = (behav_imp_weight <= behav_imp_weight_cap).logical_and(behav_mask)
+    if behav_imp_weight_floor is not None:
+        behav_mask = (behav_imp_weight >= behav_imp_weight_floor).logical_and(behav_mask)
+
     behav_mask_vals = behav_mask.to(dtype=torch.bool)
     behav_kl = torch.where(behav_mask, behav_kl, 0.0)
     behav_imp_weight = torch.where(behav_mask, behav_imp_weight, 0.0)
