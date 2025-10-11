@@ -141,6 +141,51 @@ class RemoteSGLangEngine(InferenceEngine):
             return server
         raise NotImplementedError("Only round-robin scheduling is implemented.")
 
+    # Used by WorkflowExecutor.wait() to patch proximal_logprobs_t
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int,
+        image_data: Optional[List[Any]] = None,
+    ) -> List[float]:
+        """Synchronously recompute latest-policy logprobs for the output span.
+
+        Params:
+            input_ids: full sequence (prompt + outputs)
+            prompt_len: length of the prompt segment
+            image_data: optional VLM images (unused for RLVR)
+
+        Returns:
+            A list of length len(input_ids) - prompt_len containing
+            prefill-computed logprobs for each output token under the
+            latest engine version.
+        """
+        server_addr = self.choose_server()
+        url = f"http://{server_addr}/generate"
+        payload = {
+            "input_ids": input_ids,
+            "image_data": image_data or [],
+            "sampling_params": {
+                "top_p": 1.0,
+                "top_k": int(1e8),
+                "max_new_tokens": 0,
+                "temperature": 0.0,
+            },
+            "return_logprob": True,
+            "stream": False,
+            # start at prompt_len-1 so returned [1:] aligns to outputs
+            "logprob_start_len": max(0, int(start_index)),
+        }
+        res = requests.post(url, json=payload, timeout=self.config.request_timeout)
+        res.raise_for_status()
+        result = res.json()
+        meta = result["meta_info"]
+        ilp = [x[0] for x in meta["input_token_logprobs"]]
+        # Skip the position at start_index itself; return following tokens
+        return ilp[1:]
+
+    
+
     async def agenerate(self, req: ModelRequest) -> ModelResponse:
         """Async version of generate using aiohttp."""
         # Prepare request payload
@@ -175,12 +220,15 @@ class RemoteSGLangEngine(InferenceEngine):
         if stop:
             sample_params["stop"] = stop
 
+        # See more payload param at: 
+        # https://github.com/sgl-project/sglang/blob/151e287d1af60e4e40fe4ae653fed440c93e8264/python/sglang/srt/managers/io_struct.py#L65
         payload = {
             "input_ids": req.input_ids.copy(),
             "image_data": req.image_data,  # ImageObject or str
             "sampling_params": sample_params,
             "return_logprob": True,
             "stream": False,
+            "logprob_start_len": -1,  # added by bruceli
         }
         if self.lora_init:
             # Use the same lora name because we are unable to change
@@ -192,7 +240,9 @@ class RemoteSGLangEngine(InferenceEngine):
         start_time = time.perf_counter()
         accumulated_output_tokens = []
         accumulated_output_logprobs = []
-        accumulated_versions = []
+        accumulated_versions = []  # Per-token policy version
+        proximal_logprobs_t = [] if self.config.enable_segment_wise_ppo else None
+        prompt_len = len(req.input_ids)  # Store original prompt length for proximal_t updates
 
         # A single "rid" shares the same sever to allow KV cache reuse
         if req.rid in self.rid_to_address:
@@ -242,6 +292,10 @@ class RemoteSGLangEngine(InferenceEngine):
                 timeout=self.config.request_timeout,
             )
 
+            # logger.warning(f"result keys: {result.keys()}")
+            # logger.warning(f"result: {result}")
+
+
             meta_info = result["meta_info"]
             # Check if generation is complete
             finish_reason = meta_info["finish_reason"]
@@ -256,11 +310,55 @@ class RemoteSGLangEngine(InferenceEngine):
             output_tokens = [x[1] for x in meta_info["output_token_logprobs"]]
             output_logprobs = [x[0] for x in meta_info["output_token_logprobs"]]
 
-            # Update accumulated outputs
+            # For segment-wise PPO: Handle proximal_logprobs_t correctly (only if enabled)
+            if proximal_logprobs_t is not None:
+                if len(accumulated_output_tokens) == 0:
+                    # First iteration: No previous output to update
+                    # proximal_t for new tokens will be their generation logprobs (appended below)
+                    pass
+                else:
+                    # Abort-resume iteration: Update proximal_t for previously generated tokens
+                    # input_logprobs contains logprobs under NEW policy for tokens after logprob_start_len
+                    input_logprobs = [x[0] for x in meta_info["input_token_logprobs"]]
+
+                    # logprob_start_len was set to len(input_ids) - 1 in previous iteration
+                    # So input_logprobs[0] is for position (logprob_start_len)
+                    # input_logprobs[1] is for position (logprob_start_len + 1), etc.
+
+                    # We want logprobs for previous output tokens (positions prompt_len onwards)
+                    # Previous iteration set logprob_start_len = prompt_len + prev_output_len - 1
+                    # So input_logprobs structure:
+                    # [0]: logprob for position (prompt_len + prev_output_len - 1) - last prompt token or first output
+                    # [1:]: logprobs for subsequent positions
+
+                    # Calculate how many previous output tokens we have
+                    prev_output_len = len(accumulated_output_tokens)
+
+                    # input_logprobs should contain at least prev_output_len + 1 entries
+                    # (one for the position before, then one for each output token)
+                    # We want entries [1:1+prev_output_len] which correspond to the previous output
+                    if len(input_logprobs) >= prev_output_len + 1:
+                        # Extract proximal_t for previous output tokens (under new policy)
+                        prev_output_proximal_t = input_logprobs[1:1+prev_output_len]
+
+                        # REPLACE (not extend) the existing proximal_t values
+                        for i, logprob in enumerate(prev_output_proximal_t):
+                            if i < len(proximal_logprobs_t):
+                                proximal_logprobs_t[i] = logprob
+
+            # Accumulate new output tokens
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
+            # Track the current policy version for each generated token
             accumulated_versions.extend([self.get_version()] * len(output_tokens))
 
+            # For newly generated tokens, proximal_t is their generation logprobs (for now)
+            # These will be updated in next abort-resume iteration if policy changes
+            if proximal_logprobs_t is not None:
+                proximal_logprobs_t.extend(output_logprobs)
+
+            # Set logprob_start_len to current input length, then update input_ids
+            payload["logprob_start_len"] = len(payload["input_ids"]) - 1
             payload["input_ids"] += output_tokens
             sample_params["max_new_tokens"] -= len(output_tokens)
 
@@ -272,12 +370,23 @@ class RemoteSGLangEngine(InferenceEngine):
         await session.close()
         latency = time.perf_counter() - start_time
 
+        # Note: proximal_logprobs_t now has correct length (same as accumulated_output_tokens)
+        # No need to extend again
+
+        
+
+
+        # Debug: Compare logprobs lengths  
+        # import logging
+        # logger.warning(f"[DEBUG] output_logprobs length: {len(accumulated_output_logprobs)}, proximal_logprobs_t length: {len(proximal_logprobs_t)}")
+
         response = ModelResponse(
             input_tokens=req.input_ids,
             input_images=req.image_data,
             output_tokens=accumulated_output_tokens,
             output_logprobs=accumulated_output_logprobs,
             output_versions=accumulated_versions,
+            proximal_logprobs_t=proximal_logprobs_t if proximal_logprobs_t is not None else [],
             stop_reason=stop_reason,
             latency=latency,
             ttft=latency,  # Simplified for non-streaming
@@ -387,6 +496,18 @@ class RemoteSGLangEngine(InferenceEngine):
             workflow_builder=workflow_builder,
             should_accept=should_accept,
         )
+
+    def recompute_all_proximal_t(self) -> None:
+        """Recompute proximal_t for all v-1 samples before weight update.
+
+        This should be called RIGHT BEFORE update_weights() in the training loop.
+        It ensures all samples with version = current_version - 1 get their
+        proximal_logprobs_t recomputed under the current policy.
+
+        This method processes BOTH the output queue and result cache to ensure
+        no samples miss their recompute window.
+        """
+        return self.workflow_executor.recompute_all_proximal_t()
 
     def wait(self, count: int, timeout: float | None = None) -> Dict[str, Any]:
         return self.workflow_executor.wait(count, timeout=timeout)

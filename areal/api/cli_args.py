@@ -423,6 +423,12 @@ class PPOActorConfig(TrainEngineConfig):
             "help": "Filter out tokens where behav_imp_weight exceeds behav_imp_weight_cap when computing loss. Must be > 1.0. use_decoupled_loss must be true."
         },
     )
+    behav_imp_weight_floor: float | None = field(
+        default=None,
+        metadata={
+            "help": "Filter out tokens where behav_imp_weight is below this floor (typically 1/behav_imp_weight_cap for symmetric clipping). Must be > 0 and < 1.0. Requires use_decoupled_loss=true."
+        },
+    )
     # Advanced Options
     dynamic_sampling: bool = field(
         default=False,
@@ -758,6 +764,16 @@ class InferenceEngineConfig:
         default=False,
         metadata={
             "help": "Whether to check the format of produced trajectories of a customized workflow. Useful when debugging the workflow in isolation. Should be False during RL training."
+        },
+    )
+    enable_segment_wise_ppo: bool = field(
+        default=True,
+        metadata={
+            "help": "Enable segment-wise decoupled PPO with proximal_t tracking and automatic recompute. "
+            "When enabled: (1) proximal_logprobs_t is generated during rollout with per-token version tracking, "
+            "(2) proximal_t is automatically recomputed before weight updates in pause(), "
+            "(3) behav_imp_weight uses proximal_t for segment-wise importance weighting. "
+            "When disabled, the system works exactly as before (standard PPO). Defaults to True."
         },
     )
     schedule_policy: str = field(

@@ -1,4 +1,5 @@
 import functools
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -46,6 +47,10 @@ class PPOActor:
 
         self.temperature = config.temperature
         self.dynamic_sampling = config.dynamic_sampling
+
+        # Tracking for cross-step reward mean change (for variance over time)
+        self._prev_reward_mean: float | None = None
+        self._reward_mean_hist = deque(maxlen=20)
 
     @torch.no_grad()
     def compute_logp(
@@ -209,10 +214,45 @@ class PPOActor:
         seq_stats = dict(
             no_eos_ratios=(seqlens == attn_mask.shape[-1]).float(),
             task_reward=reward_score.float(),
+            task_reward_var=torch.var(reward_score.float()).expand_as(reward_score),
             prompt_len=prompt_lens.float(),
             seq_len=seqlens.float(),
         )
         stats_tracker.stat(**seq_stats, denominator="n_seqs")
+        # For variance via E[x^2] - (E[x])^2, log second moment as well
+        stats_tracker.stat(
+            task_reward_sq=reward_score.float() ** 2, denominator="n_seqs"
+        )
+        # Also log a direct per-batch variance (unbiased=False) as a scalar for quick inspection
+        m = reward_score.float().mean().item()
+        m2 = (reward_score.float() ** 2).mean().item()
+        var_moment = max(0.0, m2 - m * m)
+        stats_tracker.scalar(task_reward_var_moment=var_moment)
+        # Cross-step change metrics: delta and z-score normalized by SE
+        n = int(reward_score.numel()) or 1
+        se = (var_moment / n) ** 0.5 if var_moment >= 0 else 0.0
+        if self._prev_reward_mean is not None:
+            delta = m - self._prev_reward_mean
+            z = abs(delta) / (se if se > 1e-8 else 1.0)
+            stats_tracker.scalar(
+                task_reward_delta=delta,
+                task_reward_delta_abs=abs(delta),
+                task_reward_delta_z=z,
+            )
+        self._prev_reward_mean = m
+        self._reward_mean_hist.append(m)
+        if len(self._reward_mean_hist) >= 2:
+            import torch as _torch
+            roll_var = _torch.tensor(list(self._reward_mean_hist)).float().var(unbiased=False).item()
+            stats_tracker.scalar(
+                task_reward_mean_roll_var=roll_var,
+                task_reward_mean_roll_std=(roll_var ** 0.5),
+            )
+        # Also log a direct per-batch variance (unbiased=False) as a scalar for quick inspection
+        m = reward_score.float().mean().item()
+        m2 = (reward_score.float() ** 2).mean().item()
+        var_moment = max(0.0, m2 - m * m)
+        stats_tracker.scalar(task_reward_var_moment=var_moment)
         scalars = dict(
             mask_no_eos_with_zero=self.config.mask_no_eos_with_zero,
             eps_clip=self.config.eps_clip,
@@ -224,6 +264,8 @@ class PPOActor:
             scalars["use_dual_clip"] = 0
         if self.config.behav_imp_weight_cap is not None:
             scalars["behav_imp_weight_cap"] = self.config.behav_imp_weight_cap
+        if self.config.behav_imp_weight_floor is not None:
+            scalars["behav_imp_weight_floor"] = self.config.behav_imp_weight_floor
         stats_tracker.scalar(**scalars)
 
         if self.config.log_agent_stats:
@@ -260,6 +302,7 @@ class PPOActor:
                     eps_clip_higher=self.config.eps_clip_higher,
                     c_clip=self.config.c_clip,
                     behav_imp_weight_cap=self.config.behav_imp_weight_cap,
+                    behav_imp_weight_floor=self.config.behav_imp_weight_floor,
                 ),
                 loss_weight_fn=lambda x: x["loss_mask"].count_nonzero(),
             )
@@ -296,6 +339,7 @@ def grpo_loss_fn(
     eps_clip_higher: float | None,
     c_clip: float | None,
     behav_imp_weight_cap: float | None,
+    behav_imp_weight_floor: float | None,
 ):
     """Loss function for actor step, all inputs should be splitted into
     pipeline micro batches, returns loss and logging stats."""
@@ -310,6 +354,12 @@ def grpo_loss_fn(
     loss_mask = input_data.get("full_loss_mask", input_data["loss_mask"]).bool()
     prox_logp = input_data["prox_logp"]
 
+    # Get segment-wise proximal logprobs if available
+    proximal_logprobs_t = input_data.get("proximal_logprobs_t", None)
+    if proximal_logprobs_t is not None:
+        # Apply same roll(-1) transformation as other logprobs for next-token prediction alignment
+        proximal_logprobs_t = torch.roll(proximal_logprobs_t, shifts=-1, dims=-1)
+
     logprobs, entropy = gather_logprobs_entropy(logits, labels, temperature)
     entropy = entropy.detach()
     loss, stat = ppo_actor_loss_fn(
@@ -321,7 +371,9 @@ def grpo_loss_fn(
         loss_mask=loss_mask,
         c_clip=c_clip,
         proximal_logprobs=prox_logp,
+        proximal_logprobs_t=proximal_logprobs_t,
         behav_imp_weight_cap=behav_imp_weight_cap,
+        behav_imp_weight_floor=behav_imp_weight_floor,
     )
 
     # Log training statistics

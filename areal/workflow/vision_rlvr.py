@@ -109,6 +109,9 @@ class VisionRLVRWorkflow(RLVRWorkflow):
                 # reward
                 rewards=torch.tensor([reward]),
             )
+            # Only add proximal_logprobs_t if segment-wise PPO is enabled
+            if resp.proximal_logprobs_t is not None:
+                res["proximal_logprobs_t"] = torch.tensor([0.0] * resp.input_len + resp.proximal_logprobs_t).unsqueeze(0)
             if "image_grid_thw" in processed_input:
                 res["multi_modal_input"][0]["image_grid_thw"] = processed_input[
                     "image_grid_thw"

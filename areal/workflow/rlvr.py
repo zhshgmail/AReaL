@@ -102,6 +102,12 @@ class RLVRWorkflow(RolloutWorkflow):
             stats_tracker.get(self.rollout_stat_scope).scalar(reward=reward)
 
             rewards.append(reward)
+
+            """ # Debug: Check tensor sizes before creating TensorDict
+            logger.warning(f"[DEBUG] Tensor sizes - seq: {len(seq)}, logprobs: {len(logprobs)}")
+            if hasattr(resp, 'proximal_logprobs_t'):
+                proxy_size = len([0.0] * resp.input_len + resp.proximal_logprobs_t)
+                logger.info(f"[DEBUG] Would-be proximal_logprobs_t size: {proxy_size}") """
             res = dict(
                 # unsqueeze to add an additional batch dimension
                 input_ids=torch.tensor(seq).unsqueeze(0),
@@ -112,6 +118,9 @@ class RLVRWorkflow(RolloutWorkflow):
                 # reward
                 rewards=torch.tensor([float(reward)]),
             )
+            # Only add proximal_logprobs_t if segment-wise PPO is enabled
+            if resp.proximal_logprobs_t is not None:
+                res["proximal_logprobs_t"] = torch.tensor([0.0] * resp.input_len + resp.proximal_logprobs_t).unsqueeze(0)
             results.append(res)
 
         if self.dump_dir is not None:

@@ -146,10 +146,17 @@ def ppo_actor_loss_fn(
     eps_clip: float,
     loss_mask: torch.Tensor,
     eps_clip_higher: Optional[float] = None,
+    proximal_logprobs_t: Optional[torch.Tensor] = None,
     c_clip: Optional[float] = None,
     behav_imp_weight_cap: Optional[float] = None,
+    behav_imp_weight_floor: Optional[float] = None,
 ) -> Tuple[torch.Tensor, Dict]:
     """
+    Params:
+        proximal_logprobs: the proximal policy logprob closest to the target policy.
+        proximal_logprobs_t: the segment-wise proximal policy logprobs.
+
+
     When decoupled loss is disabled:
     1. if recompute logp, both old_logprobs and proximal_logprobs are recomputed logp;
     2. if no recomputation, both old_logp and proximal_logprobs are produced by the inference backend.
@@ -177,15 +184,63 @@ def ppo_actor_loss_fn(
         pg_loss = torch.min(pg_loss, pg_loss3)
     else:
         dual_clip_mask = torch.zeros_like(clip_mask)
-    behav_kl = proximal_logprobs - old_logprobs
+    if proximal_logprobs_t is not None:
+        behav_kl = proximal_logprobs_t - old_logprobs
+        behav_kl_decoupled = proximal_logprobs - old_logprobs
+    else:
+        behav_kl = proximal_logprobs - old_logprobs
+        behav_kl_decoupled = behav_kl
     behav_imp_weight = behav_kl.exp()
-    behav_mask = (
-        (behav_imp_weight <= behav_imp_weight_cap).logical_and(loss_mask)
-        if behav_imp_weight_cap is not None
-        else loss_mask
-    )
+    behav_imp_weight_decoupled = behav_kl_decoupled.exp()
+
+    # Build mask with optional cap and floor for symmetric/asymmetric clipping
+    behav_mask = loss_mask
+    if behav_imp_weight_cap is not None:
+        behav_mask = (behav_imp_weight <= behav_imp_weight_cap).logical_and(behav_mask)
+    if behav_imp_weight_floor is not None:
+        behav_mask = (behav_imp_weight >= behav_imp_weight_floor).logical_and(behav_mask)
+
+    behav_mask_vals = behav_mask.to(dtype=torch.bool)
     behav_kl = torch.where(behav_mask, behav_kl, 0.0)
     behav_imp_weight = torch.where(behav_mask, behav_imp_weight, 0.0)
+
+    # if proximal_logprobs_t is not None:
+    #     seg_vals = behav_imp_weight.masked_select(behav_mask_vals)
+    #     dec_vals = behav_imp_weight_decoupled.masked_select(behav_mask_vals)
+    #     if seg_vals.numel() > 0:
+    #         seg_mean = seg_vals.mean().item()
+    #         seg_median = seg_vals.median().item()
+    #         seg_std = seg_vals.std(unbiased=False).item()
+    #         seg_abs_log = (seg_vals.log().abs()).mean().item()
+    #         seg_p90, seg_p99 = torch.quantile(
+    #             seg_vals, torch.tensor([0.9, 0.99], device=seg_vals.device)
+    #         ).tolist()
+    #         print(
+    #             '[Segment w] ' +
+    #             f'ratio_mean={seg_mean:.4f} ' +
+    #             f'ratio_median={seg_median:.4f} ' +
+    #             f'ratio_std={seg_std:.4f} ' +
+    #             f'logabs_mean={seg_abs_log:.4f} ' +
+    #             f'ratio_p90={seg_p90:.4f} ' +
+    #             f'ratio_p99={seg_p99:.4f}'
+    #         )
+    #     if dec_vals.numel() > 0:
+    #         dec_mean = dec_vals.mean().item()
+    #         dec_median = dec_vals.median().item()
+    #         dec_std = dec_vals.std(unbiased=False).item()
+    #         dec_abs_log = (dec_vals.log().abs()).mean().item()
+    #         dec_p90, dec_p99 = torch.quantile(
+    #             dec_vals, torch.tensor([0.9, 0.99], device=dec_vals.device)
+    #         ).tolist()
+    #         print(
+    #             '[Decoupled w] ' +
+    #             f'ratio_mean={dec_mean:.4f} ' +
+    #             f'ratio_median={dec_median:.4f} ' +
+    #             f'ratio_std={dec_std:.4f} ' +
+    #             f'logabs_mean={dec_abs_log:.4f} ' +
+    #             f'ratio_p90={dec_p90:.4f} ' +
+    #             f'ratio_p99={dec_p99:.4f}'
+    #         )
     pg_loss = pg_loss * behav_imp_weight
     logging_loss = pg_loss.detach()
     pg_loss = torch.where(loss_mask, pg_loss, 0).sum() / loss_mask_count
@@ -198,7 +253,8 @@ def ppo_actor_loss_fn(
         clip_mask=clip_mask,
         dual_clip_mask=dual_clip_mask,
     )
-    if proximal_logprobs is not None:
+    # Emit behavior-related stats when either proximal source is present
+    if (proximal_logprobs is not None) or (proximal_logprobs_t is not None):
         stat["behave_imp_weight"] = behav_imp_weight
         stat["behave_approx_kl"] = behav_kl
         stat["behave_mask"] = behav_mask

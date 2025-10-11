@@ -693,6 +693,12 @@ class PPOHyperparameters:
             "help": "We filter out the tokens where behav_imp_weight exceeds behav_imp_weight_cap when computing the loss, must be > 1.0, use_decoupled_loss must be true"
         },
     )
+    behav_imp_weight_floor: Optional[float] = field(
+        default=None,
+        metadata={
+            "help": "Filter out tokens where behav_imp_weight is below this floor (typically 1/behav_imp_weight_cap for symmetric clipping). Must be > 0 and < 1.0. Requires use_decoupled_loss=true."
+        },
+    )
 
 
 ## Experiment utilities. ##
