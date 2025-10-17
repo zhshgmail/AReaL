@@ -95,8 +95,16 @@ def create_sample(
 
 @pytest.fixture
 def config():
-    """Create test configuration."""
+    """Create test configuration for standard PPO (backward compatible)."""
     return InferenceEngineConfig()
+
+
+@pytest.fixture
+def config_sdp():
+    """Create test configuration with segment-wise PPO enabled."""
+    cfg = InferenceEngineConfig()
+    cfg.enable_segment_wise_ppo = True  # Enable segment-wise PPO features
+    return cfg
 
 
 @pytest.fixture
@@ -107,7 +115,7 @@ def mock_engine():
 
 @pytest.fixture
 def executor(config, mock_engine):
-    """Create WorkflowExecutor for testing."""
+    """Create WorkflowExecutor for testing (standard PPO)."""
     from unittest.mock import Mock
     executor = WorkflowExecutor(config, mock_engine)
     # Don't start the rollout thread for unit tests
@@ -118,14 +126,32 @@ def executor(config, mock_engine):
     return executor
 
 
-class TestBugFix1_InsufficientSamples:
-    """Test BUG #1: Cache filtering can leave insufficient samples."""
+@pytest.fixture
+def executor_sdp(config_sdp, mock_engine):
+    """Create WorkflowExecutor for testing with segment-wise PPO enabled."""
+    from unittest.mock import Mock
+    from areal.api.workflow_api import create_workflow_executor
 
-    def test_cache_filter_collects_more_samples(self, executor, mock_engine):
+    # Use factory to create executor with proper components
+    executor = create_workflow_executor(config_sdp, mock_engine)
+
+    # Don't start the rollout thread for unit tests
+    executor.rollout_tasks = {}
+    # Mock logger to prevent AttributeError
+    executor.logger = Mock()
+    executor.dp_world_size = 1
+    return executor
+
+
+class TestBugFix1_InsufficientSamples:
+    """Test BUG #1: Cache filtering can leave insufficient samples (requires segment-wise PPO)."""
+
+    def test_cache_filter_collects_more_samples(self, executor_sdp, mock_engine):
         """
         FIXED BUG #1: After cache filtering drops stale samples,
         wait() should collect more samples to reach the requested count.
         """
+        executor = executor_sdp
         mock_engine.set_version(5)
 
         # Add only stale samples to cache (will be filtered out)
@@ -142,11 +168,12 @@ class TestBugFix1_InsufficientSamples:
         # Should successfully return 3 samples (all from queue since cache was filtered)
         assert result["input_ids"].shape[0] == 3
 
-    def test_purge_drops_all_then_collects_new(self, executor, mock_engine):
+    def test_purge_drops_all_then_collects_new(self, executor_sdp, mock_engine):
         """
         FIXED BUG #1: When purge drops all queue samples,
         wait() should wait for new samples instead of hanging.
         """
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Add samples with version 0
@@ -237,12 +264,13 @@ class TestBugFix3_VersionConsistency:
 
 
 class TestBugFix4_StalenessConsistency:
-    """Test BUG #4: Staleness calculation is consistent."""
+    """Test BUG #4: Staleness calculation is consistent (requires segment-wise PPO)."""
 
-    def test_staleness_consistent_between_purge_and_filter(self, executor, mock_engine):
+    def test_staleness_consistent_between_purge_and_filter(self, executor_sdp, mock_engine):
         """
         FIXED BUG #4: Staleness calculation uses same version in purge and cache filter.
         """
+        executor = executor_sdp
         mock_engine.set_version(3)
 
         # Add sample to queue with version 1
@@ -262,13 +290,14 @@ class TestBugFix4_StalenessConsistency:
 
 
 class TestBugFix5_QueueFullDuringPutBack:
-    """Test BUG #5: Queue full during put-back is handled."""
+    """Test BUG #5: Queue full during put-back is handled (requires segment-wise PPO)."""
 
-    def test_put_back_handles_full_queue_gracefully(self, executor, mock_engine):
+    def test_put_back_handles_full_queue_gracefully(self, executor_sdp, mock_engine):
         """
         FIXED BUG #5: Purge put-back now uses blocking put with timeout
         instead of put_nowait to handle full queue.
         """
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Fill queue to capacity
@@ -367,8 +396,9 @@ class TestIntegration:
         assert result["input_ids"].shape[0] == 3
         assert elapsed < 1.0  # Should be near-instant
 
-    def test_wait_recollects_after_cache_filter_drops_samples(self, executor, mock_engine):
+    def test_wait_recollects_after_cache_filter_drops_samples(self, executor_sdp, mock_engine):
         """Test BUG #1 fix: Re-collect after cache filtering."""
+        executor = executor_sdp
         mock_engine.set_version(5)
 
         # Cache has only stale samples that will be filtered

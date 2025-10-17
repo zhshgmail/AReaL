@@ -21,6 +21,12 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from areal.api.cli_args import InferenceEngineConfig
 from areal.api.engine_api import InferenceEngine
 from areal.api.io_struct import RolloutStat
+from areal.api.workflow_components import (
+    ProximalRecomputer,
+    StalenessControlStrategy,
+    StandardPPOStrategy,
+    create_workflow_components,
+)
 from areal.experimental.openai.types import CompletionWithTokenLogpReward
 from areal.utils import logging
 from areal.utils.data import concat_padded_tensors, cycle_dataloader
@@ -29,7 +35,10 @@ if TYPE_CHECKING:
     from areal.api.engine_api import InferenceEngine
 
 
-RECOMPUTE_VERSION_KEY = "_recompute_version"
+# Re-export from components for backward compatibility
+from areal.api.workflow_components import RECOMPUTE_VERSION_KEY, _ensure_recompute_key
+
+ROLLOUT_POLL_WAIT_TIME = 0.05
 
 
 @dataclass
@@ -50,38 +59,6 @@ class _RolloutTask:
     create_time: int
     task: asyncio.Task
     task_input: _RolloutTaskInput
-
-
-def _extract_version(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    try:
-        tensor = torch.as_tensor(value)
-        tensor = tensor.reshape(-1)
-        if tensor.numel() == 0:
-            return None
-        return int(tensor[0].item())
-    except Exception:
-        try:
-            return int(value)
-        except Exception:
-            return None
-
-
-ROLLOUT_POLL_WAIT_TIME = 0.05
-
-
-def _ensure_recompute_key(td: TensorDict) -> None:
-    """Ensure the recompute tracking key exists with batch-aligned shape."""
-    if not isinstance(td, TensorDict):
-        return
-    if RECOMPUTE_VERSION_KEY in td.keys():
-        return
-    if "versions" not in td.keys():
-        return
-    versions = td.get("versions")
-    default_value = torch.full_like(versions[:, :1], -1, dtype=torch.int64)
-    td.set(RECOMPUTE_VERSION_KEY, default_value)
 
 
 class RolloutWorkflow:
@@ -286,12 +263,32 @@ def check_trajectory_format(
 
 
 class WorkflowExecutor:
+    """Orchestrates rollout workflow execution with pluggable components.
+
+    This class now follows dependency injection pattern - components are injected
+    rather than created internally. Use create_workflow_executor() factory for
+    standard instantiation.
+    """
 
     def __init__(
         self,
         config: InferenceEngineConfig,
         inference_engine: "InferenceEngine",
+        staleness_strategy: StalenessControlStrategy | None = None,
+        proximal_recomputer: ProximalRecomputer | None = None,
     ):
+        """Initialize WorkflowExecutor with injected components.
+
+        Args:
+            config: Training configuration
+            inference_engine: Inference engine for rollouts
+            staleness_strategy: Strategy for staleness control (injected)
+            proximal_recomputer: Component for recomputing proximal_t (injected, optional)
+
+        Note:
+            For standard usage, use create_workflow_executor() factory instead of
+            calling this constructor directly.
+        """
         self.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
         )
@@ -327,86 +324,53 @@ class WorkflowExecutor:
         self.pre_resume_hooks: List[Callable] = []
         self.post_resume_hooks: List[Callable] = []
 
-        # Auto-register segment-wise PPO recompute if feature enabled
-        if getattr(config, 'enable_segment_wise_ppo', False):
-            self.pre_pause_hooks.append(self.recompute_all_proximal_t)
+        # DEPENDENCY INJECTION: Components are provided from outside
+        # Default to StandardPPOStrategy if not provided (backward compatible)
+        self.staleness_strategy = staleness_strategy or StandardPPOStrategy(config)
+        self.proximal_recomputer = proximal_recomputer
 
-    def _calculate_staleness(
-        self,
-        versions: List[int],
-        loss_mask: List[int],
-        current_ver: int,
-        recompute_version: int = -1,
-    ) -> tuple[int, int, int]:
-        """Calculate staleness metrics for a sample.
-
-        Args:
-            versions: Version list from sample
-            loss_mask: Loss mask list from sample
-            current_ver: Current model version
-            recompute_version: Recompute version if sample was recomputed
-
-        Returns:
-            Tuple of (staleness, allow_staleness, max_version)
-        """
-        output_positions = [idx for idx, mask in enumerate(loss_mask) if mask]
-        output_versions = [versions[idx] for idx in output_positions if versions[idx] >= 0]
-
-        if not output_versions:
-            return (0, 1, -1)
-
-        max_version = max(output_versions)
-        min_version = min(output_versions)
-        recomputed = recompute_version >= 0
-
-        tail_staleness = current_ver - max_version
-        head_staleness = current_ver - min_version if recomputed else None
-        staleness = head_staleness if recomputed else tail_staleness
-
-        allow_staleness = 1
-        if recomputed and self.config.max_head_offpolicyness is not None:
-            allow_staleness = max(allow_staleness, int(self.config.max_head_offpolicyness))
-
-        return (staleness, allow_staleness, max_version)
-
-    def _is_sample_too_stale(self, td: TensorDict, current_ver: int) -> bool:
-        """Check if a sample exceeds staleness threshold.
-
-        Args:
-            td: TensorDict sample to check
-            current_ver: Current model version
-
-        Returns:
-            True if sample should be dropped due to staleness
-        """
-        try:
-            versions = td.get("versions", None)
-            loss_mask = td.get("loss_mask", None)
-            if versions is None or loss_mask is None:
-                return False  # Keep samples without version info
-
-            ver = versions[0].tolist()
-            lm_row = loss_mask[0]
-            if torch.is_tensor(lm_row):
-                lm = lm_row.tolist()
-            else:
-                lm = list(lm_row)
-
-            patched_ver = _extract_version(td.get(RECOMPUTE_VERSION_KEY, None))
-            staleness, allow_staleness, _ = self._calculate_staleness(
-                ver, lm, current_ver, patched_ver or -1
+        # GUARDRAIL: Warn if segment-wise PPO is enabled but components not properly injected
+        enable_sdp = getattr(config, "enable_segment_wise_ppo", False)
+        if enable_sdp and (staleness_strategy is None or proximal_recomputer is None):
+            import warnings
+            warnings.warn(
+                "WorkflowExecutor created with enable_segment_wise_ppo=True but without proper "
+                "component injection. This likely means the factory was not used. "
+                "Please use create_workflow_executor(config, engine) instead of direct instantiation. "
+                "Segment-wise PPO features may not work correctly!",
+                UserWarning,
+                stacklevel=2
             )
 
-            return staleness > allow_staleness
-        except Exception:
-            traceback.print_exc()
-            return False  # Keep on error
+        # Auto-register recompute hook if recomputer is provided
+        if self.proximal_recomputer is not None:
+            self.pre_pause_hooks.append(
+                lambda: self.proximal_recomputer.recompute_all(
+                    self.output_queue, self.result_cache
+                )
+            )
 
     def _purge_stale_samples_from_queue(self, current_ver: int) -> None:
         """Drain output queue and drop stale samples when version increases.
 
         Args:
             current_ver: Current model version
+        """
+        # DELEGATE to strategy - strategy contains the actual logic
+        self._last_purged_ver = self.staleness_strategy.purge_stale_samples_from_queue(
+            self.output_queue,
+            current_ver,
+            self._last_purged_ver,
+            self.inference_engine,
+            self.result_cache,
+            self.config,
+            self.logger,
+        )
+
+    def _purge_stale_samples_from_queue_OLD(self, current_ver: int) -> None:
+        """OLD IMPLEMENTATION - DEPRECATED, kept for reference.
+
+        This logic has been moved into the strategy classes.
         """
         if current_ver <= self._last_purged_ver:
             return  # Only purge when version increases
@@ -545,24 +509,20 @@ class WorkflowExecutor:
         Returns:
             Number of samples dropped
         """
-        filtered: List[TensorDict] = []
-        dropped_cache = 0
-
-        for td in self.result_cache:
-            if self._is_sample_too_stale(td, current_ver):
-                dropped_cache += 1
-            else:
-                filtered.append(td)
-
-        self.result_cache = filtered
-
-        if dropped_cache:
-            self.logger.info(f"[CacheFilter] dropped_cache={dropped_cache} size={len(self.result_cache)}")
-
-        return dropped_cache
+        # DELEGATE to strategy - strategy contains the actual logic
+        # Note: strategy modifies result_cache in place
+        return self.staleness_strategy.filter_stale_from_cache(
+            self.result_cache,
+            current_ver,
+            self.config,
+            self.logger,
+        )
 
     def recompute_all_proximal_t(self) -> None:
         """Recompute proximal_t for all v-1 samples before weight update.
+
+        This method is kept for backward compatibility. It delegates to the
+        ProximalRecomputer component if available, otherwise does nothing.
 
         This should be called RIGHT BEFORE update_weights() to ensure:
         1. All in-progress rollouts are still at current version
@@ -571,210 +531,12 @@ class WorkflowExecutor:
 
         Processes BOTH output_queue and result_cache.
         """
-        current_ver = self.inference_engine.get_version()
-
-        # 1. Recompute samples in result_cache
-        cache_recomputed = self._recompute_cache_proximal_t(current_ver)
-
-        # 2. Recompute samples in output_queue
-        queue_recomputed = self._recompute_queue_proximal_t(current_ver)
-
-        total = cache_recomputed + queue_recomputed
-        if total > 0:
-            self.logger.info(
-                f"[Recompute] Total recomputed: {total} "
-                f"(cache: {cache_recomputed}, queue: {queue_recomputed}) at version {current_ver}"
-            )
-
-    def _recompute_cache_proximal_t(self, current_ver: int) -> int:
-        """Recompute proximal_t for samples in result_cache.
-
-        Args:
-            current_ver: Current model version
-
-        Returns:
-            Number of tokens recomputed
-        """
-        total_patched = 0
-        try:
-            if hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
-                for idx, td in enumerate(self.result_cache):
-                    patched = self._recompute_sample_proximal_t(td, current_ver, f"cache#{idx}")
-                    total_patched += patched
-        except Exception:
-            traceback.print_exc()
-        return total_patched
-
-    def _recompute_queue_proximal_t(self, current_ver: int) -> int:
-        """Recompute proximal_t for samples in output_queue.
-
-        Uses drain-process-putback strategy to avoid blocking background thread.
-        Multiple iterations ensure eventual consistency even with concurrent puts.
-
-        Args:
-            current_ver: Current model version
-
-        Returns:
-            Number of tokens recomputed
-        """
-        if not hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
-            return 0
-
-        total_patched = 0
-        max_iterations = 3
-
-        try:
-            for iteration in range(max_iterations):
-                # Drain queue into temporary list (queue.get_nowait is thread-safe)
-                temp_samples = []
-                while True:
-                    try:
-                        sample = self.output_queue.get_nowait()
-                        temp_samples.append(sample)
-                    except queue.Empty:
-                        break
-
-                if not temp_samples:
-                    break  # Queue empty, done
-
-                # Process samples (no lock needed - working on local list)
-                for idx, td in enumerate(temp_samples):
-                    try:
-                        patched = self._recompute_sample_proximal_t(td, current_ver, f"queue#{idx}")
-                        total_patched += patched
-                    except Exception:
-                        traceback.print_exc()
-                        # Keep sample even if recompute fails
-
-                # Put samples back into queue (queue.put_nowait is thread-safe)
-                for sample in temp_samples:
-                    try:
-                        self.output_queue.put_nowait(sample)
-                    except queue.Full:
-                        # Queue full, use blocking put with timeout
-                        try:
-                            self.output_queue.put(sample, timeout=1.0)
-                        except queue.Full:
-                            self.logger.error("[Recompute] Queue full during put-back, sample dropped!")
-
-                self.logger.debug(
-                    f"[Recompute] Iteration {iteration + 1}: processed {len(temp_samples)} samples from queue"
-                )
-        except Exception:
-            traceback.print_exc()
-
-        return total_patched
-
-    def _recompute_sample_proximal_t(self, td: TensorDict, current_ver: int, sample_id: str = "") -> int:
-        """Recompute proximal_t for a single sample.
-
-        Args:
-            td: TensorDict sample
-            current_ver: Current model version
-            sample_id: Identifier for logging
-
-        Returns:
-            Number of tokens recomputed
-        """
-        try:
-            input_ids = td.get("input_ids", None)
-            versions = td.get("versions", None)
-            loss_mask = td.get("loss_mask", None)
-            prox = td.get("proximal_logprobs_t", None)
-            if (
-                input_ids is None
-                or versions is None
-                or loss_mask is None
-                or prox is None
-            ):
-                return 0
-
-            ids = input_ids[0].tolist()
-            ver = versions[0].tolist()
-            lm = loss_mask[0].tolist()
-            attn_mask = td.get("attention_mask", None)
-            valid_len = len(ids)
-
-            try:
-                if attn_mask is not None:
-                    mask_row = attn_mask[0]
-                    if torch.is_tensor(mask_row):
-                        valid_len = min(valid_len, int(mask_row.sum().item()))
-                    else:
-                        valid_len = min(valid_len, int(sum(mask_row)))
-            except Exception:
-                traceback.print_exc()
-
-            valid_len = min(valid_len, len(ver), len(lm))
-            if valid_len <= 0:
-                return 0
-
-            lm_valid = lm[:valid_len]
-            output_positions = [idx for idx, mask in enumerate(lm_valid) if mask]
-            out_len = len(output_positions)
-            if out_len == 0:
-                return 0
-
-            first_output_idx = output_positions[0]
-            start_index = max(0, first_output_idx - 1)
-            need_positions = [
-                (pos_idx, seq_idx)
-                for pos_idx, seq_idx in enumerate(output_positions)
-                if ver[seq_idx] == current_ver - 1
-            ]
-
-            if not need_positions:
-                return 0
-
-            # Log version histogram for debugging
-            try:
-                seg = [ver[pos] for pos in output_positions]
-                hist = {}
-                for v in seg:
-                    hist[v] = hist.get(v, 0) + 1
-                hist_items = sorted(hist.items())
-                self.logger.debug(
-                    f"[Recompute] {sample_id}: version_hist={dict(hist_items)}"
-                )
-            except Exception:
-                traceback.print_exc()
-
-            latest_out_logp = self.inference_engine.recompute_output_logprobs_sync(
-                input_ids=ids,
-                start_index=start_index,
-            )
-
-            patched_here = 0
-            max_required_offset = output_positions[-1] - start_index - 1
-            if max_required_offset >= len(latest_out_logp):
-                self.logger.warning(
-                    f"[Recompute] {sample_id}: length mismatch, required idx {max_required_offset} "
-                    f"but got {len(latest_out_logp)} logprobs"
-                )
-                return 0
-
-            for pos_idx, seq_idx in need_positions:
-                rel_offset = seq_idx - start_index - 1
-                if rel_offset < 0 or rel_offset >= len(latest_out_logp):
-                    self.logger.warning(
-                        f"[Recompute] {sample_id}: rel_offset={rel_offset} out_of_range "
-                        f"for logprobs len={len(latest_out_logp)}"
-                    )
-                    continue
-                prox[0, seq_idx] = float(latest_out_logp[rel_offset])
-                patched_here += 1
-
-            if patched_here == 0:
-                return 0
-
-            patched_value = torch.full_like(
-                versions[:, :1], int(current_ver), dtype=torch.int64
-            )
-            td.set(RECOMPUTE_VERSION_KEY, patched_value)
-            return patched_here
-        except Exception:
-            traceback.print_exc()
-            return 0
+        # DELEGATE to recomputer if available
+        if self.proximal_recomputer is not None:
+            self.proximal_recomputer.recompute_all(self.output_queue, self.result_cache)
+        else:
+            # No recomputer available - this is normal for standard PPO mode
+            pass
 
     def _recompute_stale_logprobs(self, current_ver: int) -> None:
         """DEPRECATED: Use recompute_all_proximal_t() instead.
@@ -1040,44 +802,53 @@ class WorkflowExecutor:
                                 f"accepted: {self.rollout_stat.accepted}."
                             )
                     # Plan A: conditionally filter over-stale samples before enqueueing output
-                    try:
-                        drop = False
-                        # high-water threshold and per-iteration drop budget
-                        MAX_DROP_PER_LOOP = 64
-                        qsize = self.output_queue.qsize()
-                        qmax = self.output_queue.maxsize or 1
-                        high_water = qsize >= int(0.8 * qmax)
-                        # cache low-water: keep training flowing
-                        cache_low_water = len(self.result_cache) < max(1, self.config.consumer_batch_size // 2)
-                        # local drop counter
-                        local_dropped = 0
+                    if self.staleness_strategy.should_filter_before_enqueue():
                         try:
-                            current_ver = self.inference_engine.get_version()
-                            versions = traj.get("versions", None)
-                            loss_mask = traj.get("loss_mask", None)
-                            if versions is not None:
-                                ver = versions[0].tolist()
-                                valid_versions = [v for v in ver if v >= 0]
-                                if valid_versions:
-                                    max_version = max(valid_versions)
-                                    if high_water and (not cache_low_water) and (current_ver - max_version) >= 2:
-                                        drop = True
-                        except Exception:
-                            traceback.print_exc()
-                        if drop:
-                            with self.lock:
-                                self.rollout_stat.accepted -= 1
-                                self.drop_count += 1
-                                dc = self.drop_count
-                            self.logger.warning(
-                                f"[OutputFilter] drop over-stale sample before enqueue; total_dropped={dc}"
+                            drop = False
+                            # high-water threshold and per-iteration drop budget
+                            MAX_DROP_PER_LOOP = 64
+                            qsize = self.output_queue.qsize()
+                            qmax = self.output_queue.maxsize or 1
+                            high_water = qsize >= int(0.8 * qmax)
+                            # cache low-water: keep training flowing
+                            cache_low_water = len(self.result_cache) < max(1, self.config.consumer_batch_size // 2)
+                            # local drop counter
+                            local_dropped = 0
+                            try:
+                                current_ver = self.inference_engine.get_version()
+                                versions = traj.get("versions", None)
+                                loss_mask = traj.get("loss_mask", None)
+                                if versions is not None:
+                                    ver = versions[0].tolist()
+                                    valid_versions = [v for v in ver if v >= 0]
+                                    if valid_versions:
+                                        max_version = max(valid_versions)
+                                        if high_water and (not cache_low_water) and (current_ver - max_version) >= 2:
+                                            drop = True
+                            except Exception:
+                                traceback.print_exc()
+                            if drop:
+                                with self.lock:
+                                    self.rollout_stat.accepted -= 1
+                                    self.drop_count += 1
+                                    dc = self.drop_count
+                                self.logger.warning(
+                                    f"[OutputFilter] drop over-stale sample before enqueue; total_dropped={dc}"
+                                )
+                                continue
+                            self.output_queue.put_nowait(traj)
+                        except queue.Full:
+                            raise RuntimeError(
+                                "Output queue full. Please increase queue_size."
                             )
-                            continue
-                        self.output_queue.put_nowait(traj)
-                    except queue.Full:
-                        raise RuntimeError(
-                            "Output queue full. Please increase queue_size."
-                        )
+                    else:
+                        # Feature disabled, enqueue directly without filtering
+                        try:
+                            self.output_queue.put_nowait(traj)
+                        except queue.Full:
+                            raise RuntimeError(
+                                "Output queue full. Please increase queue_size."
+                            )
 
                 await asyncio.sleep(1)
         except Exception:
@@ -1372,3 +1143,52 @@ class WorkflowExecutor:
             except Exception as e:
                 self.logger.warning(f"Post-resume hook {hook.__name__} failed: {e}")
                 traceback.print_exc()
+
+
+# ============================================================================
+# Factory Function for Creating Workflow Executor
+# ============================================================================
+
+
+def create_workflow_executor(
+    config: InferenceEngineConfig,
+    inference_engine: "InferenceEngine",
+) -> WorkflowExecutor:
+    """Factory function for creating WorkflowExecutor with proper component injection.
+
+    This is the recommended way to create a WorkflowExecutor. It handles:
+    1. Creating appropriate strategy based on config
+    2. Creating recomputer if needed
+    3. Injecting all components into executor
+    4. Following Spring @Configuration pattern
+
+    Args:
+        config: Training configuration
+        inference_engine: Inference engine for rollouts
+
+    Returns:
+        Fully configured WorkflowExecutor instance
+
+    Example:
+        >>> config = InferenceEngineConfig()
+        >>> config.enable_segment_wise_ppo = True
+        >>> engine = InferenceEngine(config)
+        >>> executor = create_workflow_executor(config, engine)
+        >>> executor.initialize()
+    """
+    # Create a temporary logger for component creation
+    # (real logger will be set in initialize())
+    temp_logger = logging.getLogger("WorkflowExecutor")
+
+    # Use component factory to create strategy and recomputer
+    strategy, recomputer = create_workflow_components(config, inference_engine, temp_logger)
+
+    # Inject components into executor
+    executor = WorkflowExecutor(
+        config=config,
+        inference_engine=inference_engine,
+        staleness_strategy=strategy,
+        proximal_recomputer=recomputer,
+    )
+
+    return executor

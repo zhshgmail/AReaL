@@ -22,7 +22,7 @@ sys.modules['megatron'] = MagicMock()
 sys.modules['megatron.core'] = MagicMock()
 sys.modules['megatron.core.parallel_state'] = MagicMock()
 
-from areal.api.workflow_api import RECOMPUTE_VERSION_KEY, WorkflowExecutor
+from areal.api.workflow_api import RECOMPUTE_VERSION_KEY, WorkflowExecutor, create_workflow_executor
 
 
 class InferenceEngineConfig:
@@ -91,7 +91,7 @@ class TestRecomputeWorkflowIntegration:
         """
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -141,7 +141,7 @@ class TestRecomputeWorkflowIntegration:
         """
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -168,7 +168,7 @@ class TestRecomputeWorkflowIntegration:
         """Test that recompute only updates tokens with version = current_ver - 1."""
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=2)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -199,7 +199,7 @@ class TestRecomputeWorkflowIntegration:
         """Test that recompute also processes samples in output_queue, not just cache."""
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -225,7 +225,7 @@ class TestRecomputeWorkflowIntegration:
         """Test that RECOMPUTE_VERSION_KEY is set after recompute."""
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=2)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -253,7 +253,7 @@ class TestRecomputeEdgeCases:
         """Test that recompute handles empty cache/queue gracefully."""
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -265,7 +265,7 @@ class TestRecomputeEdgeCases:
         """Test recompute gracefully handles samples without proximal_logprobs_t."""
         config = InferenceEngineConfig()
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -295,7 +295,7 @@ class TestBackwardCompatibility:
         """
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -327,7 +327,7 @@ class TestBackwardCompatibility:
         """Test that recompute is essentially a no-op when feature is disabled."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.rollout_tasks = {}
         executor.logger = Mock()
         executor.dp_world_size = 1
@@ -357,7 +357,7 @@ class TestHookSystem:
         """Test that pre-pause hooks are executed before pause."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.logger = Mock()
 
         # Register custom hook
@@ -378,7 +378,7 @@ class TestHookSystem:
         """Test that recompute is automatically registered when feature enabled."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=True)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.logger = Mock()
         executor.dp_world_size = 1
 
@@ -398,7 +398,7 @@ class TestHookSystem:
         """Test that multiple hooks execute in registration order."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.logger = Mock()
 
         # Register multiple hooks
@@ -427,7 +427,7 @@ class TestHookSystem:
         """Test that post-pause hooks execute after pausing."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.logger = Mock()
 
         post_hook_called = []
@@ -450,7 +450,7 @@ class TestHookSystem:
         """Test that pre-resume hooks execute before resuming."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.logger = Mock()
 
         # First pause
@@ -477,7 +477,7 @@ class TestHookSystem:
         """Test that hook exceptions are caught and pause still works."""
         config = InferenceEngineConfig(enable_segment_wise_ppo=False)
         mock_engine = MockInferenceEngine(version=1)
-        executor = WorkflowExecutor(config, mock_engine)
+        executor = create_workflow_executor(config, mock_engine)
         executor.logger = Mock()
 
         def failing_hook():

@@ -51,7 +51,8 @@ class RemotevLLMEngine(InferenceEngine):
         self._version = 0
 
         self.lock = Lock()
-        self.workflow_executor = WorkflowExecutor(
+        from areal.api.workflow_api import create_workflow_executor
+        self.workflow_executor = create_workflow_executor(
             config=config,
             inference_engine=self,
         )

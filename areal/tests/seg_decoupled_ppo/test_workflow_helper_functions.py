@@ -82,8 +82,18 @@ def create_sample(
 
 @pytest.fixture
 def config():
-    """Create test configuration."""
-    return InferenceEngineConfig()
+    """Create test configuration for standard PPO."""
+    cfg = InferenceEngineConfig()
+    # Standard PPO (no staleness control)
+    return cfg
+
+
+@pytest.fixture
+def config_sdp():
+    """Create test configuration with segment-wise PPO enabled."""
+    cfg = InferenceEngineConfig()
+    cfg.enable_segment_wise_ppo = True  # Enable segment-wise PPO features
+    return cfg
 
 
 @pytest.fixture
@@ -93,10 +103,13 @@ def mock_engine():
 
 
 @pytest.fixture
-def executor(config, mock_engine):
-    """Create WorkflowExecutor for testing."""
+def executor(config_sdp, mock_engine):
+    """Create WorkflowExecutor for testing with SDP enabled (to access strategies)."""
     from unittest.mock import Mock
-    executor = WorkflowExecutor(config, mock_engine)
+    from areal.api.workflow_api import create_workflow_executor
+
+    # Use factory to create executor with proper components
+    executor = create_workflow_executor(config_sdp, mock_engine)
     executor.rollout_tasks = {}
     # Mock logger to prevent AttributeError
     executor.logger = Mock()
@@ -105,15 +118,17 @@ def executor(config, mock_engine):
 
 
 class TestCalculateStaleness:
-    """Test _calculate_staleness helper function."""
+    """Test calculate_staleness helper function (now in strategy)."""
 
     def test_tail_staleness_for_normal_sample(self, executor):
         """Test tail staleness calculation for non-recomputed samples."""
-        staleness, allow, max_v = executor._calculate_staleness(
+        # Access strategy method
+        staleness, allow, max_v = executor.staleness_strategy.calculate_staleness(
             versions=[0, 1, 2, 3, 4],
             loss_mask=[0, 1, 1, 1, 1],  # First is input, rest are output
             current_ver=7,
-            recompute_version=-1  # Not recomputed
+            recompute_version=-1,  # Not recomputed
+            config=executor.config
         )
 
         # tail_staleness = current_ver - max_version = 7 - 4 = 3
@@ -123,11 +138,12 @@ class TestCalculateStaleness:
 
     def test_head_staleness_for_recomputed_sample(self, executor):
         """Test head staleness calculation for recomputed samples."""
-        staleness, allow, max_v = executor._calculate_staleness(
+        staleness, allow, max_v = executor.staleness_strategy.calculate_staleness(
             versions=[0, 1, 3, 4, 4],
             loss_mask=[0, 1, 1, 1, 1],
             current_ver=7,
-            recompute_version=5  # Recomputed
+            recompute_version=5,  # Recomputed
+            config=executor.config
         )
 
         # head_staleness = current_ver - min_version = 7 - 1 = 6
@@ -137,11 +153,12 @@ class TestCalculateStaleness:
 
     def test_empty_output_versions(self, executor):
         """Test staleness with no valid output versions."""
-        staleness, allow, max_v = executor._calculate_staleness(
+        staleness, allow, max_v = executor.staleness_strategy.calculate_staleness(
             versions=[-1, -1, -1],
             loss_mask=[0, 1, 1],
             current_ver=5,
-            recompute_version=-1
+            recompute_version=-1,
+            config=executor.config
         )
 
         assert staleness == 0
@@ -150,11 +167,12 @@ class TestCalculateStaleness:
 
     def test_all_loss_mask_zero(self, executor):
         """Test staleness when no tokens are in loss."""
-        staleness, allow, max_v = executor._calculate_staleness(
+        staleness, allow, max_v = executor.staleness_strategy.calculate_staleness(
             versions=[0, 1, 2, 3],
             loss_mask=[0, 0, 0, 0],  # No output tokens
             current_ver=5,
-            recompute_version=-1
+            recompute_version=-1,
+            config=executor.config
         )
 
         assert staleness == 0
@@ -165,11 +183,12 @@ class TestCalculateStaleness:
         """Test that allow_staleness respects max_head_offpolicyness config."""
         executor.config.max_head_offpolicyness = 5
 
-        staleness, allow, max_v = executor._calculate_staleness(
+        staleness, allow, max_v = executor.staleness_strategy.calculate_staleness(
             versions=[0, 1, 2],
             loss_mask=[0, 1, 1],
             current_ver=10,
-            recompute_version=8  # Recomputed
+            recompute_version=8,  # Recomputed
+            config=executor.config
         )
 
         # For recomputed samples, allow = max(1, max_head_offpolicyness) = 5
@@ -177,13 +196,13 @@ class TestCalculateStaleness:
 
 
 class TestIsSampleTooStale:
-    """Test _is_sample_too_stale helper function."""
+    """Test is_sample_too_stale helper function (now in strategy)."""
 
     def test_fresh_sample_not_stale(self, executor):
         """Test that fresh samples are not considered stale."""
         sample = create_sample(versions=[4, 4, 4, 4, 4])
 
-        is_stale = executor._is_sample_too_stale(sample, current_ver=5)
+        is_stale = executor.staleness_strategy.is_sample_too_stale(sample, current_ver=5, config=executor.config)
 
         # staleness = 5 - 4 = 1, allow = 1, not stale
         assert is_stale == False
@@ -196,7 +215,7 @@ class TestIsSampleTooStale:
             loss_mask=[0, 1, 1, 1, 1]
         )
 
-        is_stale = executor._is_sample_too_stale(sample, current_ver=5)
+        is_stale = executor.staleness_strategy.is_sample_too_stale(sample, current_ver=5, config=executor.config)
 
         # staleness = 5 - 1 = 4, allow = 1, stale!
         assert is_stale == True
@@ -205,7 +224,7 @@ class TestIsSampleTooStale:
         """Test that samples without version info are kept."""
         sample = TensorDict({"data": torch.tensor([[1, 2, 3]])}, batch_size=[1])
 
-        is_stale = executor._is_sample_too_stale(sample, current_ver=5)
+        is_stale = executor.staleness_strategy.is_sample_too_stale(sample, current_ver=5, config=executor.config)
 
         # Keep samples without version info
         assert is_stale == False
@@ -218,14 +237,14 @@ class TestIsSampleTooStale:
             recompute_version=5
         )
 
-        is_stale = executor._is_sample_too_stale(sample, current_ver=5)
+        is_stale = executor.staleness_strategy.is_sample_too_stale(sample, current_ver=5, config=executor.config)
 
         # head_staleness = 5 - 2 = 3, allow = max(1, 2) = 2, stale!
         assert is_stale == True
 
 
 class TestFilterStaleFromCache:
-    """Test _filter_stale_from_cache helper function."""
+    """Test filter_stale_from_cache helper function (now in strategy)."""
 
     def test_filters_stale_samples(self, executor):
         """Test that stale samples are removed from cache."""
@@ -235,7 +254,9 @@ class TestFilterStaleFromCache:
             create_sample(versions=[2] * 10),  # Stale
         ]
 
-        dropped = executor._filter_stale_from_cache(current_ver=5)
+        dropped = executor.staleness_strategy.filter_stale_from_cache(
+            executor.result_cache, current_ver=5, config=executor.config, logger=executor.logger
+        )
 
         assert dropped == 2
         assert len(executor.result_cache) == 1
@@ -248,7 +269,9 @@ class TestFilterStaleFromCache:
             create_sample(versions=[5] * 10),
         ]
 
-        dropped = executor._filter_stale_from_cache(current_ver=5)
+        dropped = executor.staleness_strategy.filter_stale_from_cache(
+            executor.result_cache, current_ver=5, config=executor.config, logger=executor.logger
+        )
 
         assert dropped == 0
         assert len(executor.result_cache) == 2
@@ -257,7 +280,9 @@ class TestFilterStaleFromCache:
         """Test filtering empty cache doesn't crash."""
         executor.result_cache = []
 
-        dropped = executor._filter_stale_from_cache(current_ver=5)
+        dropped = executor.staleness_strategy.filter_stale_from_cache(
+            executor.result_cache, current_ver=5, config=executor.config, logger=executor.logger
+        )
 
         assert dropped == 0
         assert len(executor.result_cache) == 0
@@ -368,32 +393,40 @@ class TestCollectSamplesFromQueue:
 
 
 class TestPurgeStaleSamplesFromQueue:
-    """Test _purge_stale_samples_from_queue helper function."""
+    """Test purge_stale_samples_from_queue helper function (now in strategy)."""
 
     def test_only_purges_when_version_increases(self, executor, mock_engine):
         """Test that purge only happens when version increases."""
         mock_engine._version = 1
-        executor._last_purged_ver = 1
+        last_purged = 1
 
         executor.output_queue.put(create_sample(versions=[0] * 10))
 
         # Should not purge since version hasn't changed
-        executor._purge_stale_samples_from_queue(current_ver=1)
+        new_last_purged = executor.staleness_strategy.purge_stale_samples_from_queue(
+            executor.output_queue, current_ver=1, last_purged_ver=last_purged,
+            inference_engine=executor.inference_engine, result_cache=executor.result_cache,
+            config=executor.config, logger=executor.logger
+        )
 
         assert executor.output_queue.qsize() == 1
-        assert executor._last_purged_ver == 1
+        assert new_last_purged == 1
 
     def test_purges_and_updates_version(self, executor, mock_engine):
         """Test that purge updates last_purged_ver."""
         mock_engine._version = 2
-        executor._last_purged_ver = 0
+        last_purged = 0
 
         executor.output_queue.put(create_sample(versions=[1] * 10))
 
-        executor._purge_stale_samples_from_queue(current_ver=2)
+        new_last_purged = executor.staleness_strategy.purge_stale_samples_from_queue(
+            executor.output_queue, current_ver=2, last_purged_ver=last_purged,
+            inference_engine=executor.inference_engine, result_cache=executor.result_cache,
+            config=executor.config, logger=executor.logger
+        )
 
         # Should have purged and updated version
-        assert executor._last_purged_ver == 2
+        assert new_last_purged == 2
 
     def test_puts_fresh_samples_back(self, executor):
         """Test that fresh samples are put back in queue."""
@@ -401,7 +434,11 @@ class TestPurgeStaleSamplesFromQueue:
         executor.output_queue.put(create_sample(versions=[0] * 10))  # Stale
         executor.output_queue.put(create_sample(versions=[4] * 10))  # Fresh
 
-        executor._purge_stale_samples_from_queue(current_ver=5)
+        executor.staleness_strategy.purge_stale_samples_from_queue(
+            executor.output_queue, current_ver=5, last_purged_ver=0,
+            inference_engine=executor.inference_engine, result_cache=executor.result_cache,
+            config=executor.config, logger=executor.logger
+        )
 
         # Should have kept the fresh sample
         assert executor.output_queue.qsize() == 1
@@ -418,7 +455,11 @@ class TestPurgeStaleSamplesFromQueue:
         executor.output_queue.put(bad_sample)
 
         # Should not crash, sample should be kept
-        executor._purge_stale_samples_from_queue(current_ver=5)
+        executor.staleness_strategy.purge_stale_samples_from_queue(
+            executor.output_queue, current_ver=5, last_purged_ver=0,
+            inference_engine=executor.inference_engine, result_cache=executor.result_cache,
+            config=executor.config, logger=executor.logger
+        )
 
         # Sample should be put back (kept on error)
         assert executor.output_queue.qsize() == 1
@@ -438,9 +479,15 @@ class TestPurgeStaleSamplesFromQueue:
 
         executor.output_queue.put = mock_put
 
-        # Should raise RuntimeError with clear message
+        # Should raise RuntimeError with clear message and log error
         with pytest.raises(RuntimeError, match="queue_size"):
-            executor._purge_stale_samples_from_queue(current_ver=5)
+            executor.staleness_strategy.purge_stale_samples_from_queue(
+                executor.output_queue, current_ver=5, last_purged_ver=0,
+                inference_engine=executor.inference_engine, result_cache=executor.result_cache,
+                config=executor.config, logger=executor.logger
+            )
+        # Check that error was logged
+        executor.logger.error.assert_called()
 
         executor.output_queue.put = original_put
 

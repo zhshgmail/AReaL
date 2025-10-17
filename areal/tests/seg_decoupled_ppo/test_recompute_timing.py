@@ -24,7 +24,7 @@ sys.modules['megatron'] = MagicMock()
 sys.modules['megatron.core'] = MagicMock()
 sys.modules['megatron.core.parallel_state'] = MagicMock()
 
-from areal.api.workflow_api import RECOMPUTE_VERSION_KEY, WorkflowExecutor
+from areal.api.workflow_api import RECOMPUTE_VERSION_KEY, WorkflowExecutor, create_workflow_executor
 
 
 # Mock InferenceEngineConfig
@@ -36,6 +36,7 @@ class InferenceEngineConfig:
         self.max_head_offpolicyness = 2
         self.enable_rollout_tracing = False
         self.request_timeout = 30
+        self.enable_segment_wise_ppo = True  # Enable recompute feature
 
 
 class MockInferenceEngine:
@@ -105,8 +106,8 @@ def mock_engine():
 
 @pytest.fixture
 def executor(config, mock_engine):
-    """Create WorkflowExecutor for testing."""
-    executor = WorkflowExecutor(config, mock_engine)
+    """Create WorkflowExecutor for testing with segment-wise PPO enabled."""
+    executor = create_workflow_executor(config, mock_engine)
     executor.rollout_tasks = {}
     # Mock logger to prevent AttributeError
     executor.logger = Mock()

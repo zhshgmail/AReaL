@@ -94,13 +94,27 @@ def create_sample(
 
 @pytest.fixture
 def config():
-    """Create test configuration."""
+    """Create test configuration for standard PPO (backward compatible)."""
     cfg = InferenceEngineConfig()
     cfg.max_concurrent_rollouts = 4
     cfg.consumer_batch_size = 2
     cfg.queue_size = 16
     cfg.max_head_offpolicyness = 2
     cfg.enable_rollout_tracing = False
+    # Backward compatible: no segment-wise PPO
+    return cfg
+
+
+@pytest.fixture
+def config_sdp():
+    """Create test configuration with segment-wise PPO enabled."""
+    cfg = InferenceEngineConfig()
+    cfg.max_concurrent_rollouts = 4
+    cfg.consumer_batch_size = 2
+    cfg.queue_size = 16
+    cfg.max_head_offpolicyness = 2
+    cfg.enable_rollout_tracing = False
+    cfg.enable_segment_wise_ppo = True  # Enable segment-wise PPO features
     return cfg
 
 
@@ -112,8 +126,23 @@ def mock_engine():
 
 @pytest.fixture
 def executor(config, mock_engine):
-    """Create WorkflowExecutor for testing."""
+    """Create WorkflowExecutor for testing (standard PPO)."""
     executor = WorkflowExecutor(config, mock_engine)
+    # Don't start the rollout thread
+    executor.rollout_tasks = {}
+    # Mock logger to prevent AttributeError and enable logger call verification
+    executor.logger = Mock()
+    executor.dp_world_size = 1  # Set required attribute from initialize()
+    return executor
+
+
+@pytest.fixture
+def executor_sdp(config_sdp, mock_engine):
+    """Create WorkflowExecutor for testing with segment-wise PPO enabled."""
+    from areal.api.workflow_api import create_workflow_executor
+
+    # Use factory to create executor with proper components
+    executor = create_workflow_executor(config_sdp, mock_engine)
     # Don't start the rollout thread
     executor.rollout_tasks = {}
     # Mock logger to prevent AttributeError and enable logger call verification
@@ -185,10 +214,11 @@ class TestWaitBasicBehavior:
 
 
 class TestVersionPurgeLogic:
-    """Test version-based queue purge logic."""
+    """Test version-based queue purge logic (requires segment-wise PPO)."""
 
-    def test_purge_drops_stale_samples(self, executor, mock_engine):
+    def test_purge_drops_stale_samples(self, executor_sdp, mock_engine):
         """Test that version switch purges stale samples."""
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Add samples with version 0
@@ -208,8 +238,9 @@ class TestVersionPurgeLogic:
         assert executor.output_queue.qsize() == 0
         assert len(executor.result_cache) == 0
 
-    def test_purge_keeps_recent_samples(self, executor, mock_engine):
+    def test_purge_keeps_recent_samples(self, executor_sdp, mock_engine):
         """Test that purge keeps samples within staleness threshold."""
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Add samples with version 0
@@ -225,8 +256,9 @@ class TestVersionPurgeLogic:
         # v0 samples should be kept (staleness=1, allow=1)
         assert result["input_ids"].shape[0] == 3
 
-    def test_purge_only_once_per_version(self, executor, mock_engine):
+    def test_purge_only_once_per_version(self, executor_sdp, mock_engine):
         """Test that purge only happens once per version increase."""
+        executor = executor_sdp
         mock_engine.set_version(1)
 
         # First wait triggers purge
@@ -244,8 +276,9 @@ class TestVersionPurgeLogic:
         result = executor.wait(count=1, timeout=0.2)
         assert result["input_ids"].shape[0] == 1
 
-    def test_purge_handles_mixed_versions(self, executor, mock_engine):
+    def test_purge_handles_mixed_versions(self, executor_sdp, mock_engine):
         """Test purge with mixed version samples."""
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Add mixed version samples
@@ -266,8 +299,9 @@ class TestVersionPurgeLogic:
         assert executor.output_queue.qsize() == 0
         assert len(executor.result_cache) == 0
 
-    def test_purge_handles_recomputed_samples(self, executor, mock_engine):
+    def test_purge_handles_recomputed_samples(self, executor_sdp, mock_engine):
         """Test purge logic with recomputed samples."""
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Sample with mixed versions but recomputed
@@ -288,8 +322,9 @@ class TestVersionPurgeLogic:
         # Sample should be dropped
         assert len(executor.result_cache) == 0
 
-    def test_purge_handles_missing_fields(self, executor, mock_engine):
+    def test_purge_handles_missing_fields(self, executor_sdp, mock_engine):
         """Test purge gracefully handles samples without version/loss_mask."""
+        executor = executor_sdp
         mock_engine.set_version(2)
 
         # Sample without versions but with required attention_mask
@@ -306,10 +341,11 @@ class TestVersionPurgeLogic:
 
 
 class TestCacheFiltering:
-    """Test cache filtering after recompute."""
+    """Test cache filtering after recompute (requires segment-wise PPO)."""
 
-    def test_cache_drops_very_stale_samples(self, executor, mock_engine):
+    def test_cache_drops_very_stale_samples(self, executor_sdp, mock_engine):
         """Test that cache drops samples exceeding staleness threshold."""
+        executor = executor_sdp
         mock_engine.set_version(5)
 
         # Add samples with different staleness
@@ -323,8 +359,9 @@ class TestCacheFiltering:
         assert result["versions"][0, 0].item() == 4
         assert len(executor.result_cache) == 0
 
-    def test_cache_filter_insufficient_samples_bug(self, executor, mock_engine):
+    def test_cache_filter_insufficient_samples_bug(self, executor_sdp, mock_engine):
         """Test BUG #1: cache filter can drop samples leaving count < requested."""
+        executor = executor_sdp
         mock_engine.set_version(5)
 
         # Add only stale samples to cache
@@ -336,8 +373,9 @@ class TestCacheFiltering:
         with pytest.raises(TimeoutError):
             result = executor.wait(count=3, timeout=0.2)
 
-    def test_cache_handles_recomputed_staleness(self, executor, mock_engine):
+    def test_cache_handles_recomputed_staleness(self, executor_sdp, mock_engine):
         """Test cache filter uses head_staleness for recomputed samples."""
+        executor = executor_sdp
         mock_engine.set_version(5)
         executor.config.max_head_offpolicyness = 3
 
@@ -359,8 +397,9 @@ class TestCacheFiltering:
 class TestConcurrencyAndRaceConditions:
     """Test concurrent access and race conditions."""
 
-    def test_output_queue_lock_protects_purge(self, executor, mock_engine):
+    def test_output_queue_lock_protects_purge(self, executor_sdp, mock_engine):
         """Test that output_queue_lock prevents race during purge."""
+        executor = executor_sdp
         mock_engine.set_version(1)
 
         # Fill queue
@@ -387,8 +426,9 @@ class TestConcurrencyAndRaceConditions:
         # Should not crash
         assert len(errors) == 0 or all(isinstance(e, TimeoutError) for e in errors)
 
-    def test_version_change_during_wait(self, executor, mock_engine):
+    def test_version_change_during_wait(self, executor_sdp, mock_engine):
         """Test behavior when version changes during wait()."""
+        executor = executor_sdp
         mock_engine.set_version(1)
 
         def version_changer():
@@ -457,8 +497,9 @@ class TestEdgeCases:
         result = executor.wait(count=1, timeout=0.2)
         assert result["input_ids"].shape[0] == 1
 
-    def test_queue_full_during_put_back(self, executor, mock_engine):
+    def test_queue_full_during_put_back(self, executor_sdp, mock_engine):
         """Test BUG: potential queue full error during purge put_back."""
+        executor = executor_sdp
         # Fill queue to max
         for i in range(executor.output_queue.maxsize):
             executor.output_queue.put(create_sample(versions=[0] * 10))
@@ -497,10 +538,11 @@ class TestEdgeCases:
 
 
 class TestStalenessCalculation:
-    """Test staleness calculation consistency."""
+    """Test staleness calculation consistency (requires segment-wise PPO)."""
 
-    def test_tail_staleness_calculation(self, executor, mock_engine):
+    def test_tail_staleness_calculation(self, executor_sdp, mock_engine):
         """Test tail staleness for non-recomputed samples."""
+        executor = executor_sdp
         mock_engine.set_version(5)
 
         sample = create_sample(
@@ -518,8 +560,9 @@ class TestStalenessCalculation:
         # Sample should be filtered out from cache
         assert len(executor.result_cache) == 0
 
-    def test_head_staleness_calculation(self, executor, mock_engine):
+    def test_head_staleness_calculation(self, executor_sdp, mock_engine):
         """Test head staleness for recomputed samples."""
+        executor = executor_sdp
         mock_engine.set_version(5)
         executor.config.max_head_offpolicyness = 3
 
@@ -537,8 +580,9 @@ class TestStalenessCalculation:
         # Should be kept
         assert result["input_ids"].shape[0] == 1
 
-    def test_staleness_consistency_between_purge_and_filter(self, executor, mock_engine):
+    def test_staleness_consistency_between_purge_and_filter(self, executor_sdp, mock_engine):
         """Test that staleness logic is consistent between purge and cache filter."""
+        executor = executor_sdp
         mock_engine.set_version(3)
 
         # Sample that should have same staleness in both places
@@ -570,8 +614,9 @@ class TestLoggerCoverage:
     like missing self.logger initialization or bare 'logger' references.
     """
 
-    def test_purge_logger_called_on_version_increase(self, executor, mock_engine):
+    def test_purge_logger_called_on_version_increase(self, executor_sdp, mock_engine):
         """Test that _purge_stale_samples_from_queue calls self.logger.info."""
+        executor = executor_sdp
         mock_engine.set_version(0)
 
         # Add samples
@@ -593,8 +638,9 @@ class TestLoggerCoverage:
         assert any('[QueuePurge]' in call for call in log_calls), \
             f"Expected [QueuePurge] log call, got: {log_calls}"
 
-    def test_filter_logger_called_when_dropping_stale_cache(self, executor, mock_engine):
+    def test_filter_logger_called_when_dropping_stale_cache(self, executor_sdp, mock_engine):
         """Test that _filter_stale_from_cache calls self.logger.info when dropping."""
+        executor = executor_sdp
         mock_engine.set_version(5)
 
         # Add stale samples to cache (staleness=3, will be dropped)
@@ -612,8 +658,9 @@ class TestLoggerCoverage:
         assert any('[CacheFilter]' in call for call in log_calls), \
             f"Expected [CacheFilter] log call, got: {log_calls}"
 
-    def test_collect_samples_logger_with_tracing_enabled(self, executor, mock_engine):
+    def test_collect_samples_logger_with_tracing_enabled(self, executor_sdp, mock_engine):
         """Test that _collect_samples_from_queue calls self.logger.info when tracing enabled."""
+        executor = executor_sdp
         # Enable rollout tracing
         executor.config.enable_rollout_tracing = True
 
@@ -649,8 +696,9 @@ class TestLoggerCoverage:
         assert any('rejected' in call.lower() for call in log_calls), \
             f"Expected rejection log, got: {log_calls}"
 
-    def test_wait_recollection_logger_called(self, executor, mock_engine):
+    def test_wait_recollection_logger_called(self, executor_sdp, mock_engine):
         """Test logger call when wait() needs to recollect after cache filtering."""
+        executor = executor_sdp
         mock_engine.set_version(3)
 
         # Add stale sample to cache (will be filtered)
@@ -668,14 +716,15 @@ class TestLoggerCoverage:
         assert any('After filtering' in call or '[CacheFilter]' in call for call in log_calls), \
             f"Expected recollection log, got: {log_calls}"
 
-    def test_purge_error_logger_called_on_queue_full(self, executor, mock_engine):
-        """Test that _purge calls self.logger.error when queue full during put_back."""
+    def test_purge_error_logger_called_on_queue_full(self, executor_sdp, mock_engine):
+        """Test that purge logic has logger.error when queue full during put_back."""
         # This is hard to trigger without actually filling queue to max during put_back
-        # But we verify the code path exists by checking the method has logger.error
+        # But we verify the code path exists by checking the strategy has logger.error
         import inspect
-        source = inspect.getsource(executor._purge_stale_samples_from_queue)
-        assert 'self.logger.error' in source, \
-            "Expected self.logger.error in _purge_stale_samples_from_queue"
+        # Check the strategy method that contains the actual purge logic
+        source = inspect.getsource(executor_sdp.staleness_strategy.purge_stale_samples_from_queue)
+        assert 'logger.error' in source, \
+            "Expected logger.error in staleness_strategy.purge_stale_samples_from_queue"
 
     def test_logger_is_mock_not_none(self, executor):
         """Test that executor.logger is properly mocked and not None."""
