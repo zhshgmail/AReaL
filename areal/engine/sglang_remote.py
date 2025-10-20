@@ -24,6 +24,8 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
 )
 from areal.api.workflow_api import RolloutWorkflow, WorkflowExecutor
+from areal.api.workflow_factory import create_workflow_executor
+from areal.core.staleness_manager import StalenessManager
 from areal.platforms import current_platform
 from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
@@ -118,13 +120,19 @@ class RemoteSGLangEngine(InferenceEngine):
         self.executor = ProcessPoolExecutor(max_workers=1)
         self.lora_init = False
 
-        # Create workflow executor
-        self.workflow_executor = WorkflowExecutor(
-            config=self.config,
-            inference_engine=self,
+        # Create staleness manager (needed for factory)
+        staleness_manager = StalenessManager(
+            max_concurrent_rollouts=self.config.max_concurrent_rollouts or self.config.consumer_batch_size,
+            consumer_batch_size=self.config.consumer_batch_size,
+            max_staleness=self.config.max_head_offpolicyness,
         )
-        self.workflow_executor.initialize(
-            logger=self.logger, train_data_parallel_size=train_data_parallel_size
+
+        # Create workflow executor using factory
+        self.workflow_executor = create_workflow_executor(
+            inference_engine=self,
+            staleness_manager=staleness_manager,
+            config=self.config,
+            logger=self.logger,
         )
 
     def destroy(self):
@@ -197,7 +205,9 @@ class RemoteSGLangEngine(InferenceEngine):
         start_time = time.perf_counter()
         accumulated_output_tokens = []
         accumulated_output_logprobs = []
-        accumulated_versions = []
+        accumulated_versions = []  # Per-token policy version
+        proximal_logprobs_t = [] if self.config.enable_segment_wise_ppo else None
+        prompt_len = len(req.input_ids)  # Store original prompt length for proximal_t updates
 
         # A single "rid" shares the same sever to allow KV cache reuse
         if req.rid in self.rid_to_address:
@@ -261,11 +271,51 @@ class RemoteSGLangEngine(InferenceEngine):
             output_tokens = [x[1] for x in meta_info["output_token_logprobs"]]
             output_logprobs = [x[0] for x in meta_info["output_token_logprobs"]]
 
-            # Update accumulated outputs
+            # For segment-wise PPO: Handle proximal_logprobs_t correctly (only if enabled)
+            if proximal_logprobs_t is not None:
+                if len(accumulated_output_tokens) == 0:
+                    # First iteration: No previous output to update
+                    # proximal_t for new tokens will be their generation logprobs (appended below)
+                    pass
+                else:
+                    # Abort-resume iteration: Update proximal_t for previously generated tokens
+                    # input_logprobs contains logprobs under NEW policy for tokens after logprob_start_len
+                    input_logprobs = [x[0] for x in meta_info["input_token_logprobs"]]
+
+                    # logprob_start_len was set to len(input_ids) - 1 in previous iteration
+                    # So input_logprobs[0] is for position (logprob_start_len)
+                    # input_logprobs[1] is for position (logprob_start_len + 1), etc.
+
+                    # We want logprobs for previous output tokens (positions prompt_len onwards)
+                    # Previous iteration set logprob_start_len = prompt_len + prev_output_len - 1
+                    # So input_logprobs structure:
+                    # [0]: logprob for position (prompt_len + prev_output_len - 1) - last prompt token or first output
+                    # [1:]: logprobs for subsequent positions
+
+                    # Calculate how many previous output tokens we have
+                    prev_output_len = len(accumulated_output_tokens)
+                    if prev_output_len > 0:
+                        # Extract proximal_t for previous output tokens (under new policy)
+                        prev_output_proximal_t = input_logprobs[1:1+prev_output_len]
+
+                        # REPLACE (not extend) the existing proximal_t values
+                        for i, logprob in enumerate(prev_output_proximal_t):
+                            if i < len(proximal_logprobs_t):
+                                proximal_logprobs_t[i] = logprob
+
+            # Accumulate new output tokens
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
+            # Track the current policy version for each generated token
             accumulated_versions.extend([self.get_version()] * len(output_tokens))
 
+            # For newly generated tokens, proximal_t is their generation logprobs (for now)
+            # These will be updated in next abort-resume iteration if policy changes
+            if proximal_logprobs_t is not None:
+                proximal_logprobs_t.extend(output_logprobs)
+
+            # Set logprob_start_len to current input length, then update input_ids
+            payload["logprob_start_len"] = len(payload["input_ids"]) - 1
             payload["input_ids"] += output_tokens
             sample_params["max_new_tokens"] -= len(output_tokens)
 
@@ -283,6 +333,7 @@ class RemoteSGLangEngine(InferenceEngine):
             output_tokens=accumulated_output_tokens,
             output_logprobs=accumulated_output_logprobs,
             output_versions=accumulated_versions,
+            proximal_logprobs_t=proximal_logprobs_t if proximal_logprobs_t is not None else [],
             stop_reason=stop_reason,
             latency=latency,
             ttft=latency,  # Simplified for non-streaming
@@ -450,6 +501,75 @@ class RemoteSGLangEngine(InferenceEngine):
     def resume(self):
         """Resume request submission for async rollout."""
         return self.workflow_executor.resume()
+
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int = 0,
+    ) -> List[float]:
+        """Recompute output logprobs for a given sequence (for segment-wise PPO).
+
+        This is a synchronous method that makes a request to the SGLang server to
+        recompute the log probabilities for the output tokens.
+
+        Args:
+            input_ids: Complete sequence of token IDs (prompt + generated tokens)
+            start_index: Index to start computing logprobs from (default: 0)
+
+        Returns:
+            List of logprobs for tokens after start_index
+
+        Note:
+            This is used by ProximalRecomputer to recompute proximal_logprobs_t
+            for v-1 samples before weight updates.
+        """
+        # Choose a server (round-robin)
+        server_addr = self.choose_server()
+
+        # Prepare payload for logprob recomputation
+        payload = {
+            "input_ids": input_ids,
+            "sampling_params": {
+                "temperature": 0.0,  # Greedy sampling for deterministic logprobs
+                "max_new_tokens": 1,  # We only need logprobs, not generation
+            },
+            "return_logprob": True,
+            "stream": False,
+            "logprob_start_len": start_index + 1,  # SGLang parameter for logprob computation
+        }
+
+        try:
+            response = requests.post(
+                f"http://{server_addr}/generate",
+                json=payload,
+                timeout=self.config.request_timeout,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract logprobs from response
+            meta_info = result.get("meta_info", {})
+            input_token_logprobs = meta_info.get("input_token_logprobs", [])
+
+            # Return logprobs for tokens after start_index
+            # input_token_logprobs[i] is the logprob of input_ids[i+1] given input_ids[:i+1]
+            return input_token_logprobs[start_index:]
+        except Exception as e:
+            self.logger.error(f"Failed to recompute logprobs: {e}")
+            raise
+
+    def update_weights(self, *args, **kwargs):
+        """Update weights with proximal logprob recomputation (segment-wise PPO).
+
+        This method wraps the normal weight update process and calls proximal
+        recomputation BEFORE updating weights.
+        """
+        # Recompute proximal logprobs for v-1 samples before weight update
+        self.workflow_executor.recompute_proximal_logprobs()
+
+        # Then proceed with normal weight update (subclasses should implement actual update)
+        # For RemoteSGLangEngine, weight updates happen via update_weights_from_disk() or
+        # update_weights_from_distributed(), so this is just a hook point
 
 
 def update_weights_from_disk(

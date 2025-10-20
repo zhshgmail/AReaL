@@ -24,6 +24,8 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
 )
 from areal.api.workflow_api import RolloutWorkflow, WorkflowExecutor
+from areal.api.workflow_factory import create_workflow_executor
+from areal.core.staleness_manager import StalenessManager
 from areal.platforms import current_platform
 from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
@@ -124,13 +126,19 @@ class RemotevLLMEngine(InferenceEngine):
         self.logger.info("Servers are all ready!")
         self.executor = ProcessPoolExecutor(max_workers=1)
 
-        # Create workflow executor
-        self.workflow_executor = WorkflowExecutor(
-            config=self.config,
-            inference_engine=self,
+        # Create staleness manager (needed for factory)
+        staleness_manager = StalenessManager(
+            max_concurrent_rollouts=self.config.max_concurrent_rollouts or self.config.consumer_batch_size,
+            consumer_batch_size=self.config.consumer_batch_size,
+            max_staleness=self.config.max_head_offpolicyness,
         )
-        self.workflow_executor.initialize(
-            logger=self.logger, train_data_parallel_size=train_data_parallel_size
+
+        # Create workflow executor using factory
+        self.workflow_executor = create_workflow_executor(
+            inference_engine=self,
+            staleness_manager=staleness_manager,
+            config=self.config,
+            logger=self.logger,
         )
 
     def destroy(self):
@@ -200,7 +208,8 @@ class RemotevLLMEngine(InferenceEngine):
         start_time = time.perf_counter()
         accumulated_output_tokens = []
         accumulated_output_logprobs = []
-        accumulated_versions = []
+        accumulated_versions = []  # Per-token policy version
+        proximal_logprobs_t = [] if self.config.enable_segment_wise_ppo else None
 
         # A single "rid" shares the same sever to allow KV cache reuse
         if req.rid in self.rid_to_address:
@@ -266,7 +275,13 @@ class RemotevLLMEngine(InferenceEngine):
             # Update accumulated outputs
             accumulated_output_tokens.extend(output_tokens)
             accumulated_output_logprobs.extend(output_logprobs)
+            # Track the current policy version for each generated token
             accumulated_versions.extend([self.get_version()] * len(output_tokens))
+
+            # For segment-wise PPO: Initialize proximal_t to generation logprobs
+            # These will be recomputed later by ProximalRecomputer for v-1 tokens
+            if proximal_logprobs_t is not None:
+                proximal_logprobs_t.extend(output_logprobs)
 
             payload["prompt"] += output_tokens
             payload["max_tokens"] -= len(output_tokens)
@@ -280,6 +295,7 @@ class RemotevLLMEngine(InferenceEngine):
             output_tokens=accumulated_output_tokens,
             output_logprobs=accumulated_output_logprobs,
             output_versions=accumulated_versions,
+            proximal_logprobs_t=proximal_logprobs_t if proximal_logprobs_t is not None else [],
             stop_reason=stop_reason,
             latency=latency,
             ttft=latency,  # Simplified for non-streaming
@@ -431,6 +447,75 @@ class RemotevLLMEngine(InferenceEngine):
     def resume(self):
         """Resume request submission for async rollout."""
         return self.workflow_executor.resume()
+
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int = 0,
+    ) -> List[float]:
+        """Recompute output logprobs for a given sequence (for segment-wise PPO).
+
+        This is a synchronous method that makes a request to the vLLM server to
+        recompute the log probabilities for the output tokens.
+
+        Args:
+            input_ids: Complete sequence of token IDs (prompt + generated tokens)
+            start_index: Index to start computing logprobs from (default: 0)
+
+        Returns:
+            List of logprobs for tokens after start_index
+
+        Note:
+            This is used by ProximalRecomputer to recompute proximal_logprobs_t
+            for v-1 samples before weight updates.
+        """
+        # Choose a server (round-robin)
+        server_addr = self.choose_server()
+
+        # Prepare payload for logprob recomputation
+        # vLLM's /v1/completions endpoint can return logprobs for prompt tokens
+        payload = {
+            "prompt": input_ids,
+            "max_tokens": 1,  # We only need logprobs, not generation
+            "temperature": 0.0,  # Greedy sampling for deterministic logprobs
+            "logprobs": 0,  # Request logprobs
+            "echo": True,  # Echo prompt to get prompt logprobs
+            "return_tokens_as_token_ids": True,
+        }
+
+        try:
+            response = requests.post(
+                f"http://{server_addr}/v1/completions",
+                json=payload,
+                timeout=self.config.request_timeout,
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            # Extract logprobs from response
+            choice = result["choices"][0]
+            logprobs_data = choice.get("logprobs", {})
+            token_logprobs = logprobs_data.get("token_logprobs", [])
+
+            # Return logprobs for tokens after start_index
+            # token_logprobs[i] is the logprob of token i given previous tokens
+            return token_logprobs[start_index + 1 :]  # Skip start_index
+        except Exception as e:
+            self.logger.error(f"Failed to recompute logprobs: {e}")
+            raise
+
+    def update_weights(self, *args, **kwargs):
+        """Update weights with proximal logprob recomputation (segment-wise PPO).
+
+        This method wraps the normal weight update process and calls proximal
+        recomputation BEFORE updating weights.
+        """
+        # Recompute proximal logprobs for v-1 samples before weight update
+        self.workflow_executor.recompute_proximal_logprobs()
+
+        # Then proceed with normal weight update (subclasses should implement actual update)
+        # For RemotevLLMEngine, weight updates happen via update_weights_from_disk() or
+        # update_weights_from_distributed(), so this is just a hook point
 
 
 def update_weights_from_disk(

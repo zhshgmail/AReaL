@@ -16,6 +16,8 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
 )
 from areal.api.workflow_api import RolloutWorkflow, WorkflowExecutor
+from areal.api.workflow_factory import create_workflow_executor
+from areal.core.staleness_manager import StalenessManager
 from areal.utils import logging, name_resolve, names, pkg_version
 
 logger = logging.getLogger(__name__)
@@ -45,17 +47,10 @@ class SGLangEngine(InferenceEngine):
         self.config = config
         self.engine_args = engine_args or {}
 
-        qsize = config.queue_size or config.max_concurrent_rollouts * 10
-        self.input_queue = Queue(maxsize=qsize)
-        self.output_queue = Queue(maxsize=qsize)
-        self.result_cache = []
-
         self._version = 0
 
-        self.workflow_executor = WorkflowExecutor(
-            config=config,
-            inference_engine=self,
-        )
+        # Workflow executor will be initialized in initialize()
+        self.workflow_executor: WorkflowExecutor
 
     def initialize(
         self,
@@ -72,8 +67,19 @@ class SGLangEngine(InferenceEngine):
 
         self.engine = sgl.Engine(**self.engine_args)
 
-        self.workflow_executor.initialize(
-            logger=self.logger, train_data_parallel_size=train_data_parallel_size
+        # Create staleness manager (needed for factory)
+        staleness_manager = StalenessManager(
+            max_concurrent_rollouts=self.config.max_concurrent_rollouts or self.config.consumer_batch_size,
+            consumer_batch_size=self.config.consumer_batch_size,
+            max_staleness=self.config.max_head_offpolicyness,
+        )
+
+        # Create workflow executor using factory
+        self.workflow_executor = create_workflow_executor(
+            inference_engine=self,
+            staleness_manager=staleness_manager,
+            config=self.config,
+            logger=self.logger,
         )
 
     def destroy(self):
@@ -118,6 +124,7 @@ class SGLangEngine(InferenceEngine):
         accumulated_output_tokens = []
         accumulated_output_logprobs = []
         accumulated_versions = []
+        proximal_logprobs_t = [] if self.config.enable_segment_wise_ppo else None
         stop_reason = "length"
         while (
             stop_reason != "stop"
@@ -149,6 +156,11 @@ class SGLangEngine(InferenceEngine):
                 accumulated_output_logprobs.extend(output_logprobs)
                 accumulated_versions.extend([-1] * len(output_tokens))
 
+                # For segment-wise PPO: Initialize proximal_t to generation logprobs
+                # These will be recomputed later by ProximalRecomputer for v-1 tokens
+                if proximal_logprobs_t is not None:
+                    proximal_logprobs_t.extend(output_logprobs)
+
             except Exception as e:
                 raise RuntimeError(f"Local SGLang engine generation failed: {e}")
 
@@ -160,6 +172,7 @@ class SGLangEngine(InferenceEngine):
             output_tokens=accumulated_output_tokens,
             output_logprobs=accumulated_output_logprobs,
             output_versions=accumulated_versions,
+            proximal_logprobs_t=proximal_logprobs_t if proximal_logprobs_t is not None else [],
             stop_reason=stop_reason,
             latency=latency,
             ttft=latency,
@@ -174,6 +187,10 @@ class SGLangEngine(InferenceEngine):
             raise RuntimeError(
                 "Local SGLang engine is not initialized, cannot update weights."
             )
+
+        # Recompute proximal logprobs BEFORE weight update (segment-wise PPO)
+        self.workflow_executor.recompute_proximal_logprobs()
+
         if meta.type == "disk":
             try:
                 update_name = names.update_weights_from_disk(
@@ -198,6 +215,54 @@ class SGLangEngine(InferenceEngine):
                 raise
         else:
             raise NotImplementedError(f"Unsupported weight update type: {meta.type}")
+
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int = 0,
+    ) -> List[float]:
+        """Recompute output logprobs for a given sequence (for segment-wise PPO).
+
+        This is a synchronous method that uses the local SGLang engine to
+        recompute the log probabilities for the output tokens.
+
+        Args:
+            input_ids: Complete sequence of token IDs (prompt + generated tokens)
+            start_index: Index to start computing logprobs from (default: 0)
+
+        Returns:
+            List of logprobs for tokens after start_index
+
+        Note:
+            This is used by ProximalRecomputer to recompute proximal_logprobs_t
+            for v-1 samples before weight updates.
+        """
+        if not hasattr(self, "engine") or self.engine is None:
+            raise RuntimeError(
+                "Local SGLang engine is not initialized, cannot recompute logprobs."
+            )
+
+        try:
+            # Use SGLang's sync API for logprob computation
+            # Generate with greedy decoding (temperature=0) to get deterministic logprobs
+            outputs = self.engine.generate(
+                input_ids=input_ids,
+                sampling_params={
+                    "temperature": 0.0,
+                    "max_new_tokens": 1,  # We only need logprobs, not generation
+                },
+                return_logprob=True,
+            )
+
+            # Extract logprobs from output
+            meta_info = outputs.get("meta_info", {})
+            input_token_logprobs = meta_info.get("input_token_logprobs", [])
+
+            # Return logprobs for tokens after start_index
+            return input_token_logprobs[start_index:]
+        except Exception as e:
+            logger.error(f"Failed to recompute logprobs: {e}")
+            raise
 
     def submit(
         self,

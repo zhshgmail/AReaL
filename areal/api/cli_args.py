@@ -479,10 +479,25 @@ class PPOActorConfig(TrainEngineConfig):
             "help": "Use the decoupled loss. Implicitly enables recompute_logprob."
         },
     )
+    enable_segment_wise_ppo: bool = field(
+        default=True,
+        metadata={
+            "help": "[Auto-populated from BaseExperimentConfig.enable_segment_wise_ppo] "
+            "Enable segment-wise decoupled PPO loss computation (training-side). "
+            "Uses per-token proximal_logprobs_t for accurate behavioral importance weight calculation. "
+            "Do not set this directly; set BaseExperimentConfig.enable_segment_wise_ppo instead."
+        },
+    )
     behav_imp_weight_cap: float | None = field(
         default=None,
         metadata={
             "help": "Filter out tokens where behav_imp_weight exceeds behav_imp_weight_cap when computing loss. Must be > 1.0. use_decoupled_loss must be true."
+        },
+    )
+    behav_imp_weight_floor: float | None = field(
+        default=None,
+        metadata={
+            "help": "Filter out tokens where behav_imp_weight is below this floor (typically 1/behav_imp_weight_cap for symmetric clipping). Must be > 0 and < 1.0. Requires use_decoupled_loss=true."
         },
     )
     # Advanced Options
@@ -844,6 +859,15 @@ class InferenceEngineConfig:
             "help": "The grace period after calling /pause_generation. Wait until all requests have been dropped."
         },
     )
+    enable_segment_wise_ppo: bool = field(
+        default=True,
+        metadata={
+            "help": "[Auto-populated from BaseExperimentConfig.enable_segment_wise_ppo] "
+            "Enable proximal logprob tracking during generation (inference-side). "
+            "Tracks proximal_logprobs_t and output_versions per token for segment-wise PPO. "
+            "Do not set this directly; set BaseExperimentConfig.enable_segment_wise_ppo instead."
+        },
+    )
 
 
 @dataclass
@@ -1190,6 +1214,18 @@ class BaseExperimentConfig:
         metadata={"help": "Path to the tokenizer."},
     )
 
+    # Segment-wise Decoupled PPO Feature
+    enable_segment_wise_ppo: bool = field(
+        default=True,
+        metadata={
+            "help": "Enable segment-wise decoupled PPO algorithm (single switch for entire feature). "
+            "When enabled, the inference engine tracks proximal_logprobs_t and output_versions per token, "
+            "and the training engine uses proximal_t for accurate behavioral importance weight calculation. "
+            "This flag is automatically propagated to both InferenceEngineConfig and PPOActorConfig. "
+            "Set to false to disable and use standard PPO behavior."
+        },
+    )
+
     train_dataset: DatasetConfig = field(default_factory=DatasetConfig)
     valid_dataset: DatasetConfig | None = field(default=None)
 
@@ -1282,8 +1318,16 @@ def load_expr_config(argv: List[str], config_cls):
     cfg = to_structured_cfg(cfg, config_cls=config_cls)
     cfg = OmegaConf.to_object(cfg)
     assert isinstance(cfg, config_cls)
-    # Setup environment
 
+    # Auto-propagate enable_segment_wise_ppo from top-level to child configs
+    # This ensures a single switch controls the entire feature
+    if hasattr(cfg, 'enable_segment_wise_ppo'):
+        if hasattr(cfg, 'rollout') and hasattr(cfg.rollout, 'enable_segment_wise_ppo'):
+            cfg.rollout.enable_segment_wise_ppo = cfg.enable_segment_wise_ppo
+        if hasattr(cfg, 'actor') and hasattr(cfg.actor, 'enable_segment_wise_ppo'):
+            cfg.actor.enable_segment_wise_ppo = cfg.enable_segment_wise_ppo
+
+    # Setup environment
     name_resolve.reconfigure(cfg.cluster.name_resolve)
 
     from areal.utils.stats_logger import StatsLogger
