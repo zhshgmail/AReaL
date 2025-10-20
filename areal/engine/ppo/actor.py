@@ -264,6 +264,7 @@ class PPOActor:
                     eps_clip_higher=self.config.eps_clip_higher,
                     c_clip=self.config.c_clip,
                     behav_imp_weight_cap=self.config.behav_imp_weight_cap,
+                    behav_imp_weight_floor=self.config.behav_imp_weight_floor,
                 ),
                 loss_weight_fn=lambda x: x["loss_mask"].count_nonzero(),
             )
@@ -318,6 +319,7 @@ def grpo_loss_fn(
     eps_clip_higher: float | None,
     c_clip: float | None,
     behav_imp_weight_cap: float | None,
+    behav_imp_weight_floor: float | None = None,
 ):
     """Loss function for actor step, all inputs should be splitted into
     pipeline micro batches, returns loss and logging stats."""
@@ -332,6 +334,12 @@ def grpo_loss_fn(
     loss_mask = input_data.get("full_loss_mask", input_data["loss_mask"]).bool()
     prox_logp = input_data["prox_logp"]
 
+    # For segment-wise PPO: Get proximal_logprobs_t if available
+    proximal_logprobs_t = input_data.get("proximal_logprobs_t")
+    if proximal_logprobs_t is not None:
+        # Roll proximal_logprobs_t like we do with logprobs
+        proximal_logprobs_t = torch.roll(proximal_logprobs_t, shifts=-1, dims=-1)
+
     logprobs, entropy = gather_logprobs_entropy(logits, labels, temperature)
     entropy = entropy.detach()
     loss, stat = ppo_actor_loss_fn(
@@ -344,6 +352,8 @@ def grpo_loss_fn(
         c_clip=c_clip,
         proximal_logprobs=prox_logp,
         behav_imp_weight_cap=behav_imp_weight_cap,
+        proximal_logprobs_t=proximal_logprobs_t,
+        behav_imp_weight_floor=behav_imp_weight_floor,
     )
 
     # Log training statistics

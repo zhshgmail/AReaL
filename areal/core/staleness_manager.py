@@ -4,9 +4,15 @@ This module provides the StalenessManager class which manages capacity
 and staleness constraints for asynchronous rollout generation in RL training.
 """
 
-from threading import Lock
+from __future__ import annotations
+
+from threading import RLock
+from typing import TYPE_CHECKING, List
 
 from areal.api.io_struct import RolloutStat
+
+if TYPE_CHECKING:
+    from areal.core.capacity_modifier import CapacityModifier
 
 
 class StalenessManager:
@@ -48,9 +54,12 @@ class StalenessManager:
         self.consumer_batch_size = consumer_batch_size
         self.max_staleness = max_staleness
 
-        # Thread-safe access to rollout statistics
-        self.lock = Lock()
+        # Thread-safe access to rollout statistics (RLock for reentrant locking)
+        self.lock = RLock()
         self.rollout_stat = RolloutStat()
+
+        # Extension point: capacity modifiers (e.g., for filtered samples)
+        self.capacity_modifiers: List[CapacityModifier] = []
 
     def get_capacity(self, current_version: int) -> int:
         """Calculate available capacity for new rollouts.
@@ -97,7 +106,33 @@ class StalenessManager:
 
             # Return the minimum of both constraints
             capacity = min(concurrency_capacity, staleness_capacity)
+
+            # Apply capacity modifiers (extension point)
+            for modifier in self.capacity_modifiers:
+                capacity = modifier.modify_capacity(
+                    capacity, current_version, self.get_stats()
+                )
+
             return capacity
+
+    def register_capacity_modifier(self, modifier: CapacityModifier) -> None:
+        """Register a capacity modifier (extension point).
+
+        Capacity modifiers are applied sequentially in registration order
+        after the base capacity is calculated. This allows custom logic
+        to adjust capacity (e.g., compensating for filtered samples).
+
+        Parameters
+        ----------
+        modifier : CapacityModifier
+            Modifier to register
+
+        Example
+        -------
+        >>> manager = StalenessManager(...)
+        >>> manager.register_capacity_modifier(MyModifier())
+        """
+        self.capacity_modifiers.append(modifier)
 
     def on_rollout_submitted(self) -> None:
         """Callback when a rollout is submitted for execution.

@@ -57,6 +57,8 @@ def actor_loss_fn(
     c_clip: Optional[float] = None,
     proximal_logprobs: Optional[torch.FloatTensor] = None,
     behav_imp_weight_cap: Optional[torch.FloatTensor] = None,
+    proximal_logprobs_t: Optional[torch.FloatTensor] = None,
+    behav_imp_weight_floor: Optional[float] = None,
 ) -> Tuple[torch.Tensor, Dict]:
     """Compute PPO actor loss function.
 
@@ -72,6 +74,11 @@ def actor_loss_fn(
             Check https://arxiv.org/pdf/1912.09729 for details.
         loss_mask (Optional[torch.BoolTensor], optional): Mask for loss computation.
             1 if valid else 0. Defaults to None.
+        proximal_logprobs_t (Optional[torch.FloatTensor], optional): Proximal logprobs for
+            segment-wise PPO. If provided, used instead of proximal_logprobs for behavioral
+            importance weight calculation.
+        behav_imp_weight_floor (Optional[float], optional): Lower bound for behavioral importance
+            weight filtering (symmetric with cap).
 
     Returns:
         Tuple[torch.Tensor, Dict]: Scalar loss and statistics.
@@ -92,6 +99,10 @@ def actor_loss_fn(
         denorm_logprobs = proximal_logprobs
     else:
         denorm_logprobs = old_logprobs
+    if proximal_logprobs_t is not None:
+        assert proximal_logprobs_t.dtype == torch.float32
+        if proximal_logprobs_t.is_inference():
+            proximal_logprobs_t = proximal_logprobs_t.clone()
 
     # create mask
     if loss_mask is None:
@@ -116,14 +127,18 @@ def actor_loss_fn(
     else:
         dual_clip_mask = torch.zeros_like(clip_mask)
     if proximal_logprobs is not None:
-        behav_kl = proximal_logprobs - old_logprobs
+        # For segment-wise PPO: Use proximal_logprobs_t if available
+        behav_logprobs = proximal_logprobs_t if proximal_logprobs_t is not None else proximal_logprobs
+        behav_kl = behav_logprobs - old_logprobs
         behav_imp_weight = behav_kl.exp()
+
+        # Apply both upper and lower bound filtering
+        behav_mask = loss_mask
         if behav_imp_weight_cap is not None:
-            behav_mask = (behav_imp_weight <= behav_imp_weight_cap).logical_and(
-                loss_mask
-            )
-        else:
-            behav_mask = loss_mask
+            behav_mask = behav_mask.logical_and(behav_imp_weight <= behav_imp_weight_cap)
+        if behav_imp_weight_floor is not None:
+            behav_mask = behav_mask.logical_and(behav_imp_weight >= behav_imp_weight_floor)
+
         behav_kl = torch.where(behav_mask, behav_kl, 0.0)
         behav_imp_weight = torch.where(behav_mask, behav_imp_weight, 0.0)
         pg_loss = pg_loss * behav_imp_weight

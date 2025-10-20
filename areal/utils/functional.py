@@ -178,6 +178,8 @@ def ppo_actor_loss_fn(
     eps_clip_higher: Optional[float] = None,
     c_clip: Optional[float] = None,
     behav_imp_weight_cap: Optional[float] = None,
+    proximal_logprobs_t: Optional[torch.Tensor] = None,
+    behav_imp_weight_floor: Optional[float] = None,
 ) -> Tuple[torch.Tensor, Dict]:
     """
     When decoupled loss is disabled:
@@ -186,6 +188,10 @@ def ppo_actor_loss_fn(
 
     When decoupled loss is enabled, proximal_logprobs is the recomputed logp,
     old_logprobs is produced by the inference engine.
+
+    When segment-wise PPO is enabled (proximal_logprobs_t is provided):
+    - proximal_logprobs_t is used for behavioral importance weight calculation
+    - behav_imp_weight_floor provides lower bound filtering (symmetric with cap)
     """
     loss_mask_count = loss_mask.count_nonzero() or 1
     ratio = torch.where(loss_mask, torch.exp(logprobs - proximal_logprobs), 0)
@@ -207,13 +213,19 @@ def ppo_actor_loss_fn(
         pg_loss = torch.min(pg_loss, pg_loss3)
     else:
         dual_clip_mask = torch.zeros_like(clip_mask)
-    behav_kl = proximal_logprobs - old_logprobs
+
+    # For segment-wise PPO: Use proximal_logprobs_t if available
+    behav_logprobs = proximal_logprobs_t if proximal_logprobs_t is not None else proximal_logprobs
+    behav_kl = behav_logprobs - old_logprobs
     behav_imp_weight = behav_kl.exp()
-    behav_mask = (
-        (behav_imp_weight <= behav_imp_weight_cap).logical_and(loss_mask)
-        if behav_imp_weight_cap is not None
-        else loss_mask
-    )
+
+    # Apply both upper and lower bound filtering
+    behav_mask = loss_mask
+    if behav_imp_weight_cap is not None:
+        behav_mask = behav_mask.logical_and(behav_imp_weight <= behav_imp_weight_cap)
+    if behav_imp_weight_floor is not None:
+        behav_mask = behav_mask.logical_and(behav_imp_weight >= behav_imp_weight_floor)
+
     behav_kl = torch.where(behav_mask, behav_kl, 0.0)
     behav_imp_weight = torch.where(behav_mask, behav_imp_weight, 0.0)
     pg_loss = pg_loss * behav_imp_weight

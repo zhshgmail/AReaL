@@ -23,7 +23,12 @@ from areal.utils import logging
 from areal.utils.data import concat_padded_tensors, cycle_dataloader
 
 if TYPE_CHECKING:
+    from areal.api.cache_api import RolloutCache
     from areal.api.engine_api import InferenceEngine
+    from areal.api.proximal_recomputer import ProximalRecomputer
+    from areal.api.queue_api import RolloutQueue
+    from areal.api.staleness_control import StalenessControlStrategy
+    from areal.core.filtered_capacity_modifier import FilteredSamplesCapacityModifier
 
 
 ROLLOUT_POLL_WAIT_TIME = 0.05
@@ -257,7 +262,29 @@ class WorkflowExecutor:
         config: InferenceEngineConfig,
         inference_engine: "InferenceEngine",
         staleness_manager: StalenessManager | None = None,
+        output_queue: "RolloutQueue" | None = None,
+        result_cache: "RolloutCache" | None = None,
+        staleness_strategy: "StalenessControlStrategy | None" = None,
+        proximal_recomputer: "ProximalRecomputer | None" = None,
+        filtered_capacity_modifier: "FilteredSamplesCapacityModifier | None" = None,
+        logger: Any = None,
     ):
+        """Initialize WorkflowExecutor.
+
+        Note: This constructor should receive all dependencies pre-configured.
+        Use workflow_factory.create_workflow_executor() for proper dependency injection.
+
+        Args:
+            config: Engine configuration
+            inference_engine: Inference engine instance
+            staleness_manager: Staleness manager (optional, created in initialize if not provided)
+            output_queue: Rollout queue (should be provided by factory)
+            result_cache: Rollout cache (should be provided by factory)
+            staleness_strategy: Staleness control strategy (optional)
+            proximal_recomputer: Proximal logprob recomputer (optional)
+            filtered_capacity_modifier: Capacity modifier for filtered samples (optional)
+            logger: Logger instance
+        """
         self.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
         )
@@ -273,18 +300,42 @@ class WorkflowExecutor:
         # The manager will be properly initialized in initialize()
         self.staleness_manager = staleness_manager
 
+        # Queue and cache - MUST be injected by factory
         qsize = config.queue_size or self.max_concurrent_rollouts * 16
         self.input_queue = queue.Queue(maxsize=qsize)
-        self.output_queue = queue.Queue(maxsize=qsize)
-        self.result_cache: List[_TimedResult] = []
+
+        # Defensive check: ensure queue and cache are provided
+        if output_queue is None or result_cache is None:
+            raise ValueError(
+                "WorkflowExecutor requires output_queue and result_cache to be provided. "
+                "Use workflow_factory.create_workflow_executor() to create instances correctly."
+            )
+
+        self.output_queue = output_queue
+        self.result_cache = result_cache
+
+        # Staleness control components (optional, for segment-wise PPO)
+        self.staleness_strategy = staleness_strategy
+        self.proximal_recomputer = proximal_recomputer
+        self.filtered_capacity_modifier = filtered_capacity_modifier
+
+        # Logger - initialize with default if not provided
+        if logger is None:
+            logger = logging.getLogger("WorkflowExecutor")
+        self.logger = logger
+
+        # Track last purged version for queue purging
+        self._last_purged_version = -1
 
         # For trajectory format checking
         self._expected_trajectory_keys: set | None = None
 
     def initialize(self, logger=None, train_data_parallel_size: int | None = None):
-        if logger is None:
-            logger = logging.getLogger("WorkflowExecutor")
-        self.logger = logger
+        # Use provided logger, or existing logger from __init__, or create default
+        if logger is not None:
+            self.logger = logger
+        elif self.logger is None:
+            self.logger = logging.getLogger("WorkflowExecutor")
 
         # Initialize staleness manager if not provided
         if self.staleness_manager is None:
@@ -413,24 +464,44 @@ class WorkflowExecutor:
                     )
 
                     if should_accept_traj:
-                        # Notify staleness manager of accepted rollout
-                        self.staleness_manager.on_rollout_accepted()
-                        if self.config.enable_rollout_tracing:
-                            stat = self.staleness_manager.get_stats()
-                            self.logger.info(
-                                f"Finish and accept rollout {task_rid}. "
-                                f"Submit: {stat.submitted}, "
-                                f"running: {stat.running}, "
-                                f"accepted: {stat.accepted}."
-                            )
-                        try:
-                            self.output_queue.put_nowait(
-                                _TimedResult(task_obj.create_time, traj)
-                            )
-                        except queue.Full:
-                            raise RuntimeError(
-                                "Output queue full. Please increase queue_size."
-                            )
+                        # Pre-filter stale samples before enqueue (segment-wise PPO optimization)
+                        should_enqueue = True
+                        if self.staleness_strategy is not None and self.staleness_strategy.should_filter_before_enqueue():
+                            current_ver = self.inference_engine.get_version()
+                            if self.staleness_strategy.is_sample_too_stale(traj, current_ver, self.config):
+                                # Sample is stale, don't enqueue
+                                should_enqueue = False
+                                # Track filtered sample
+                                if self.filtered_capacity_modifier is not None:
+                                    self.filtered_capacity_modifier.on_samples_filtered(1, current_ver)
+
+                        if should_enqueue:
+                            # Notify staleness manager of accepted rollout
+                            self.staleness_manager.on_rollout_accepted()
+                            if self.config.enable_rollout_tracing:
+                                stat = self.staleness_manager.get_stats()
+                                self.logger.info(
+                                    f"Finish and accept rollout {task_rid}. "
+                                    f"Submit: {stat.submitted}, "
+                                    f"running: {stat.running}, "
+                                    f"accepted: {stat.accepted}."
+                                )
+                            try:
+                                self.output_queue.put_nowait(
+                                    _TimedResult(task_obj.create_time, traj)
+                                )
+                            except queue.Full:
+                                raise RuntimeError(
+                                    "Output queue full. Please increase queue_size."
+                                )
+                        else:
+                            # Sample was filtered due to staleness
+                            # Still count as accepted (for capacity tracking), but not enqueued
+                            self.staleness_manager.on_rollout_accepted()
+                            if self.config.enable_rollout_tracing:
+                                self.logger.info(
+                                    f"Finish rollout {task_rid} but filtered due to staleness (pre-enqueue)"
+                                )
                     else:
                         # Rollout completed but was rejected
                         # Only decrement running count since it was never accepted
@@ -483,35 +554,73 @@ class WorkflowExecutor:
 
         See :meth:`~areal.api.engine_api.InferenceEngine.wait` for detailed documentation.
         """
+        current_ver = self.inference_engine.get_version()
+
+        # Step 1: Purge stale samples from queue when version changes (segment-wise PPO)
+        if self.staleness_strategy is not None:
+            self._last_purged_version = self.staleness_strategy.purge_stale_samples_from_queue(
+                output_queue=self.output_queue,
+                current_ver=current_ver,
+                last_purged_ver=self._last_purged_version,
+                inference_engine=self.inference_engine,
+                result_cache=self.result_cache,
+                config=self.config,
+                logger=self.logger,
+            )
+
+        # Step 2: Drain queue to cache (standard logic)
         tik = time.perf_counter()
         timeout = timeout or float(7 * 24 * 3600)
         while not self.exiting.is_set() and time.perf_counter() - tik < timeout:
             while True:
-                # Drain all outputs.
+                # Drain all outputs from queue to cache
                 try:
                     timed_result = self.output_queue.get_nowait()
-                    self.result_cache.append(timed_result)
+                    self.result_cache.add(timed_result)
                 except queue.Empty:
                     break
-            if len(self.result_cache) >= count:
+
+            # Step 3: Filter stale samples from cache (segment-wise PPO)
+            if self.staleness_strategy is not None:
+                dropped_cache = self.staleness_strategy.filter_stale_from_cache(
+                    result_cache=self.result_cache,
+                    current_ver=current_ver,
+                    config=self.config,
+                    logger=self.logger,
+                )
+                # Update filtered capacity modifier
+                if dropped_cache > 0 and self.filtered_capacity_modifier is not None:
+                    self.filtered_capacity_modifier.on_samples_filtered(
+                        dropped_cache, current_ver
+                    )
+
+            # Check if we have enough samples
+            cache_size = self.result_cache.size()
+            if cache_size >= count:
                 break
             else:
                 time.sleep(ROLLOUT_POLL_WAIT_TIME)
-        accepted = len(self.result_cache)
+
+        # Step 4: Validate we have enough samples
+        accepted = self.result_cache.size()
         if self.exiting.is_set():
             raise RuntimeError("Rollout engine is exiting, cannot wait for results.")
         if accepted < count:
             raise TimeoutError(
                 f"Timed out waiting for {count} rollouts, only received {accepted}."
             )
+
         if self.config.enable_rollout_tracing:
             self.logger.info(f"Rollout results are ready!")
-        self.result_cache.sort(key=lambda x: x.t)
-        results, self.result_cache = (
-            self.result_cache[:count],
-            self.result_cache[count:],
-        )
+
+        # Step 5: Take samples from cache
+        results = self.result_cache.take_first_n(count)
+        # Sort and shuffle
+        results.sort(key=lambda x: x.t)
         random.shuffle(results)
+        # Update capacity modifier
+        if self.filtered_capacity_modifier is not None:
+            self.filtered_capacity_modifier.on_capacity_consumed(count)
         return concat_padded_tensors([r.data for r in results])
 
     def rollout_batch(
@@ -581,3 +690,17 @@ class WorkflowExecutor:
         See :meth:`~areal.api.engine_api.InferenceEngine.resume` for detailed documentation.
         """
         self.paused.clear()
+
+    def recompute_proximal_logprobs(self) -> None:
+        """Recompute proximal logprobs for stale samples (segment-wise PPO).
+
+        This should be called RIGHT BEFORE weight updates to ensure all v-1 samples
+        get their proximal_logprobs_t recomputed with current model weights.
+
+        This method is a no-op if proximal recomputation is not configured.
+        """
+        if self.proximal_recomputer is not None:
+            self.proximal_recomputer.recompute_all(
+                output_queue=self.output_queue,
+                result_cache=self.result_cache,
+            )
