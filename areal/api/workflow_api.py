@@ -378,18 +378,31 @@ class WorkflowExecutor:
 
     def _rollout_thread(self):
         """Thread that runs the rollout loop."""
+        print(f"[DEBUG _rollout_thread] Worker thread starting...")
         try:
+            print(f"[DEBUG _rollout_thread] About to call uvloop.run()")
             uvloop.run(self._rollout_thread_async())
-        except Exception:
+            print(f"[DEBUG _rollout_thread] uvloop.run() completed normally")
+        except Exception as e:
+            print(f"[DEBUG _rollout_thread] EXCEPTION in worker thread: {type(e).__name__}: {e}")
             traceback.print_exc()
 
     async def _rollout_thread_async(self):
+        print(f"[DEBUG _rollout_thread_async] Async loop starting...")
         rollout_tasks: Dict[str, _RolloutTask] = {}
         rid = 0
         try:
+            iteration = 0
             while not self.exiting.is_set():
+                iteration += 1
+                if iteration % 10 == 1:  # Log every 10 iterations
+                    print(f"[DEBUG _rollout_thread_async] Iteration {iteration}, input_queue_size={self.input_queue.qsize()}, num_tasks={len(rollout_tasks)}")
+
                 # Check capacity
                 capacity = self.get_capacity()
+                if iteration % 10 == 1:
+                    print(f"[DEBUG _rollout_thread_async] capacity={capacity}, paused={self.paused.is_set()}")
+
                 # Create new rollout task
                 while (
                     capacity > 0
@@ -398,6 +411,7 @@ class WorkflowExecutor:
                 ):
                     x = self.input_queue.get_nowait()
                     x: _RolloutTaskInput
+                    print(f"[DEBUG _rollout_thread_async] Got task from input_queue, creating rollout task {rid}")
                     self.logger.debug(f"Get data from puller: {x.data}")
                     task = asyncio.create_task(
                         x.workflow.arun_episode(self.inference_engine, x.data),
@@ -490,6 +504,7 @@ class WorkflowExecutor:
                                 self.output_queue.put_nowait(
                                     _TimedResult(task_obj.create_time, traj)
                                 )
+                                print(f"[DEBUG _rollout_thread_async] Put result into output_queue for task {task_rid}, queue_size={self.output_queue.qsize()}")
                             except queue.Full:
                                 raise RuntimeError(
                                     "Output queue full. Please increase queue_size."
