@@ -25,7 +25,6 @@ from areal.api.io_struct import (
 )
 from areal.api.workflow_api import RolloutWorkflow, WorkflowExecutor
 from areal.api.workflow_factory import create_workflow_executor
-from areal.core.staleness_manager import StalenessManager
 from areal.platforms import current_platform
 from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
@@ -120,19 +119,13 @@ class RemoteSGLangEngine(InferenceEngine):
         self.executor = ProcessPoolExecutor(max_workers=1)
         self.lora_init = False
 
-        # Create staleness manager (needed for factory)
-        staleness_manager = StalenessManager(
-            max_concurrent_rollouts=self.config.max_concurrent_rollouts or self.config.consumer_batch_size,
-            consumer_batch_size=self.config.consumer_batch_size,
-            max_staleness=self.config.max_head_offpolicyness,
-        )
-
         # Create workflow executor using factory
+        # StalenessManager will be created in initialize() with proper DP scaling
         self.workflow_executor = create_workflow_executor(
             inference_engine=self,
-            staleness_manager=staleness_manager,
             config=self.config,
             logger=self.logger,
+            train_data_parallel_size=train_data_parallel_size,
         )
 
     def destroy(self):

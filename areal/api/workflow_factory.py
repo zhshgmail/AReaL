@@ -127,9 +127,10 @@ def register_capacity_modifiers(
 
 def create_workflow_executor(
     inference_engine: "InferenceEngine",
-    staleness_manager: "StalenessManager",
     config: "InferenceEngineConfig",
     logger: Any,
+    staleness_manager: "StalenessManager | None" = None,
+    train_data_parallel_size: int | None = None,
 ) -> "WorkflowExecutor":
     """Create and configure WorkflowExecutor with all dependencies.
 
@@ -143,9 +144,10 @@ def create_workflow_executor(
 
     Args:
         inference_engine: Inference engine instance
-        staleness_manager: Staleness manager instance
         config: Engine configuration
         logger: Logger instance
+        staleness_manager: Optional staleness manager instance (created in initialize if None)
+        train_data_parallel_size: Optional DP world size for capacity scaling
 
     Returns:
         Fully configured WorkflowExecutor instance
@@ -153,9 +155,9 @@ def create_workflow_executor(
     Example:
         >>> executor = create_workflow_executor(
         ...     inference_engine=engine,
-        ...     staleness_manager=manager,
         ...     config=config,
-        ...     logger=logger
+        ...     logger=logger,
+        ...     train_data_parallel_size=4  # Will scale capacity by 4
         ... )
         >>> executor.start()
     """
@@ -171,7 +173,8 @@ def create_workflow_executor(
 
     # Create and register capacity modifier (if needed)
     filtered_capacity_modifier = create_filtered_capacity_modifier(config)
-    register_capacity_modifiers(staleness_manager, filtered_capacity_modifier)
+    if staleness_manager is not None:
+        register_capacity_modifiers(staleness_manager, filtered_capacity_modifier)
 
     # Import here to avoid circular dependency
     from areal.api.workflow_api import WorkflowExecutor
@@ -189,8 +192,12 @@ def create_workflow_executor(
         logger=logger,
     )
 
-    # Initialize the executor (starts worker thread)
-    # Note: train_data_parallel_size is None, letting initialize() auto-detect
-    executor.initialize(logger=logger, train_data_parallel_size=None)
+    # Initialize the executor (starts worker thread and creates staleness_manager if None)
+    # Pass train_data_parallel_size for proper DP scaling
+    executor.initialize(logger=logger, train_data_parallel_size=train_data_parallel_size)
+
+    # Register capacity modifiers after staleness_manager is created
+    if staleness_manager is None and executor.staleness_manager is not None:
+        register_capacity_modifiers(executor.staleness_manager, filtered_capacity_modifier)
 
     return executor
