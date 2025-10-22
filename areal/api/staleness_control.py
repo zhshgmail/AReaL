@@ -267,17 +267,20 @@ class SegmentWisePPOStrategy(StalenessControlStrategy):
         v0_picked = 0
         v0_kept = 0
         v0_dropped = 0
-        put_back_buf: List[TensorDict] = []
+        put_back_buf: List[Any] = []  # List of _TimedResult objects
 
         # Drain entire queue
         while True:
             try:
-                traj = output_queue.get_nowait()
+                timed_result = output_queue.get_nowait()
             except queue.Empty:
                 break
 
             drained += 1
             try:
+                # Extract trajectory data from _TimedResult
+                traj = timed_result.data
+
                 if self.is_sample_too_stale(traj, current_ver, config):
                     dropped += 1
                     # Track v0 statistics
@@ -293,7 +296,7 @@ class SegmentWisePPOStrategy(StalenessControlStrategy):
                                 if max_version == 0:
                                     v0_dropped += 1
                 else:
-                    put_back_buf.append(traj)
+                    put_back_buf.append(timed_result)  # Keep the _TimedResult object
                     kept += 1
                     # Track statistics for kept samples
                     versions = traj.get("versions", None)
@@ -313,14 +316,16 @@ class SegmentWisePPOStrategy(StalenessControlStrategy):
                                     if max_version == 0:
                                         v0_picked += 1
             except Exception:
-                put_back_buf.append(traj)  # Keep on error
+                put_back_buf.append(timed_result)  # Keep on error, preserve _TimedResult
                 traceback.print_exc()
 
         # Put items back with timeout to handle full queue
-        for item in put_back_buf:
+        for timed_result in put_back_buf:
             try:
-                _ensure_recompute_key(item)
-                output_queue.put(item, timeout=1.0)
+                # Ensure recompute key in the data dict
+                _ensure_recompute_key(timed_result.data)
+                # Put back the _TimedResult object
+                output_queue.put(timed_result, timeout=1.0)
             except queue.Full:
                 logger.error(
                     f"Output queue remains full after version purge. "
@@ -359,8 +364,9 @@ class SegmentWisePPOStrategy(StalenessControlStrategy):
         """
         # Use cache's filter_inplace method with predicate
         # Predicate returns True for items to KEEP (not stale)
+        # Note: cache items are _TimedResult objects, need to access .data field
         dropped_cache = result_cache.filter_inplace(
-            lambda td: not self.is_sample_too_stale(td, current_ver, config)
+            lambda timed_result: not self.is_sample_too_stale(timed_result.data, current_ver, config)
         )
 
         if dropped_cache:
