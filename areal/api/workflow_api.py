@@ -331,13 +331,11 @@ class WorkflowExecutor:
         self._expected_trajectory_keys: set | None = None
 
     def initialize(self, logger=None, train_data_parallel_size: int | None = None):
-        print(f"[DEBUG initialize()] WorkflowExecutor.initialize() called")
         # Use provided logger, or existing logger from __init__, or create default
         if logger is not None:
             self.logger = logger
         elif self.logger is None:
             self.logger = logging.getLogger("WorkflowExecutor")
-        print(f"[DEBUG initialize()] Logger initialized: {self.logger}")
 
         # Initialize staleness manager if not provided
         if self.staleness_manager is None:
@@ -364,12 +362,10 @@ class WorkflowExecutor:
                 max_staleness=self.config.max_head_offpolicyness,
             )
 
-        print(f"[DEBUG initialize()] About to create and start rollout thread")
         self.rollout_thread = threading.Thread(
             target=self._rollout_thread, daemon=True
         )  # set daemon=True to automatically exit when error occurs
         self.rollout_thread.start()
-        print(f"[DEBUG initialize()] Rollout thread started: {self.rollout_thread}, is_alive={self.rollout_thread.is_alive()}")
 
     def destroy(self):
         self.exiting.set()
@@ -382,30 +378,19 @@ class WorkflowExecutor:
 
     def _rollout_thread(self):
         """Thread that runs the rollout loop."""
-        print(f"[DEBUG _rollout_thread] Worker thread starting...")
         try:
-            print(f"[DEBUG _rollout_thread] About to call uvloop.run()")
             uvloop.run(self._rollout_thread_async())
-            print(f"[DEBUG _rollout_thread] uvloop.run() completed normally")
         except Exception as e:
-            print(f"[DEBUG _rollout_thread] EXCEPTION in worker thread: {type(e).__name__}: {e}")
+            self.logger.error(f"Worker thread exception: {type(e).__name__}: {e}")
             traceback.print_exc()
 
     async def _rollout_thread_async(self):
-        print(f"[DEBUG _rollout_thread_async] Async loop starting...")
         rollout_tasks: Dict[str, _RolloutTask] = {}
         rid = 0
         try:
-            iteration = 0
             while not self.exiting.is_set():
-                iteration += 1
-                if iteration % 10 == 1:  # Log every 10 iterations
-                    print(f"[DEBUG _rollout_thread_async] Iteration {iteration}, input_queue_size={self.input_queue.qsize()}, num_tasks={len(rollout_tasks)}")
-
                 # Check capacity
                 capacity = self.get_capacity()
-                if iteration % 10 == 1:
-                    print(f"[DEBUG _rollout_thread_async] capacity={capacity}, paused={self.paused.is_set()}")
 
                 # Create new rollout task
                 while (
@@ -415,7 +400,6 @@ class WorkflowExecutor:
                 ):
                     x = self.input_queue.get_nowait()
                     x: _RolloutTaskInput
-                    print(f"[DEBUG _rollout_thread_async] Got task from input_queue, creating rollout task {rid}")
                     self.logger.debug(f"Get data from puller: {x.data}")
                     task = asyncio.create_task(
                         x.workflow.arun_episode(self.inference_engine, x.data),
@@ -508,7 +492,6 @@ class WorkflowExecutor:
                                 self.output_queue.put_nowait(
                                     _TimedResult(task_obj.create_time, traj)
                                 )
-                                print(f"[DEBUG _rollout_thread_async] Put result into output_queue for task {task_rid}, queue_size={self.output_queue.qsize()}")
                             except queue.Full:
                                 raise RuntimeError(
                                     "Output queue full. Please increase queue_size."
@@ -558,7 +541,6 @@ class WorkflowExecutor:
 
         See :meth:`~areal.api.engine_api.InferenceEngine.submit` for detailed documentation.
         """
-        self.logger.info(f"[DEBUG submit()] Submitting task, input_queue_size={self.input_queue.qsize()}")
         try:
             if workflow is None:
                 workflow = workflow_builder()
@@ -566,7 +548,6 @@ class WorkflowExecutor:
                 data=data, workflow=workflow, should_accept=should_accept
             )
             self.input_queue.put_nowait(x)
-            self.logger.info(f"[DEBUG submit()] Task submitted successfully, new queue_size={self.input_queue.qsize()}")
         except queue.Full:
             raise RuntimeError("Input queue full. Please increase queue_size.")
 
@@ -593,21 +574,14 @@ class WorkflowExecutor:
         tik = time.perf_counter()
         timeout = timeout or float(7 * 24 * 3600)
 
-        self.logger.info(f"[DEBUG wait()] Starting wait loop: count={count}, timeout={timeout}, enable_segment_wise_ppo={self.config.enable_segment_wise_ppo}")
-
         while not self.exiting.is_set() and time.perf_counter() - tik < timeout:
             # Drain all outputs from queue to cache
-            drained = 0
             while True:
                 try:
                     timed_result = self.output_queue.get_nowait()
                     self.result_cache.add(timed_result)
-                    drained += 1
                 except queue.Empty:
                     break
-
-            if drained > 0:
-                self.logger.info(f"[DEBUG wait()] Drained {drained} items from queue")
 
             # Step 3: Filter stale samples from cache (segment-wise PPO)
             if self.staleness_strategy is not None:
@@ -625,10 +599,8 @@ class WorkflowExecutor:
 
             # Check if we have enough samples
             cache_size = self.result_cache.size()
-            self.logger.info(f"[DEBUG wait()] cache_size={cache_size}, need={count}, elapsed={time.perf_counter()-tik:.1f}s")
 
             if cache_size >= count:
-                self.logger.info(f"[DEBUG wait()] Got enough samples: {cache_size} >= {count}")
                 break
             else:
                 time.sleep(ROLLOUT_POLL_WAIT_TIME)
