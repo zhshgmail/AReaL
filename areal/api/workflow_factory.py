@@ -189,4 +189,8 @@ def create_workflow_executor(
         logger=logger,
     )
 
+    # Initialize the executor (starts worker thread)
+    # Note: train_data_parallel_size is None, letting initialize() auto-detect
+    executor.initialize(logger=logger, train_data_parallel_size=None)
+
     return executor

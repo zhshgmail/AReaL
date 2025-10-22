@@ -331,11 +331,13 @@ class WorkflowExecutor:
         self._expected_trajectory_keys: set | None = None
 
     def initialize(self, logger=None, train_data_parallel_size: int | None = None):
+        print(f"[DEBUG initialize()] WorkflowExecutor.initialize() called")
         # Use provided logger, or existing logger from __init__, or create default
         if logger is not None:
             self.logger = logger
         elif self.logger is None:
             self.logger = logging.getLogger("WorkflowExecutor")
+        print(f"[DEBUG initialize()] Logger initialized: {self.logger}")
 
         # Initialize staleness manager if not provided
         if self.staleness_manager is None:
@@ -362,10 +364,12 @@ class WorkflowExecutor:
                 max_staleness=self.config.max_head_offpolicyness,
             )
 
+        print(f"[DEBUG initialize()] About to create and start rollout thread")
         self.rollout_thread = threading.Thread(
             target=self._rollout_thread, daemon=True
         )  # set daemon=True to automatically exit when error occurs
         self.rollout_thread.start()
+        print(f"[DEBUG initialize()] Rollout thread started: {self.rollout_thread}, is_alive={self.rollout_thread.is_alive()}")
 
     def destroy(self):
         self.exiting.set()
