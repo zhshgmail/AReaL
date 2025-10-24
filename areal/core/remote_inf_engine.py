@@ -32,8 +32,6 @@ from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
 from areal.utils.launcher import wait_llm_server_addrs
 
-from .workflow_executor import WorkflowExecutor
-
 RID_CACHE_SIZE = 128
 
 
@@ -256,6 +254,7 @@ class RemoteInfEngine:
         engine_id: str | None = None,
         addr: str | list[str] | None = None,
         train_data_parallel_size: int | None = None,
+        workflow_executor_factory: Callable | None = None,
     ):
         """Initialize the engine by discovering and connecting to servers.
 
@@ -267,6 +266,10 @@ class RemoteInfEngine:
             Server address(es) to connect to. If None, will auto-discover.
         train_data_parallel_size : int | None
             Data parallel size of the training engine
+        workflow_executor_factory : Callable | None
+            Optional factory function for creating WorkflowExecutor.
+            If None, uses default create_workflow_executor from workflow_factory.
+            This allows for dependency injection and testing with mock factories.
         """
         if engine_id is None:
             if dist.is_initialized():
@@ -313,12 +316,16 @@ class RemoteInfEngine:
         self.logger.info("Servers are all ready!")
         self.executor = ProcessPoolExecutor(max_workers=1)
 
-        self.workflow_executor = WorkflowExecutor(
-            config=self.config,
+        # Use provided factory or default to create_workflow_executor
+        if workflow_executor_factory is None:
+            from areal.api.workflow_factory import create_workflow_executor
+            workflow_executor_factory = create_workflow_executor
+
+        self.workflow_executor = workflow_executor_factory(
             inference_engine=self,
-        )
-        self.workflow_executor.initialize(
-            logger=self.logger, train_data_parallel_size=train_data_parallel_size
+            config=self.config,
+            logger=self.logger,
+            train_data_parallel_size=train_data_parallel_size,
         )
 
     def destroy(self):

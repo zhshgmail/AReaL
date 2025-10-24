@@ -112,6 +112,12 @@ class RLVRWorkflow(RolloutWorkflow):
                 # reward
                 rewards=torch.tensor([float(reward)]),
             )
+
+            # For segment-wise PPO: Add proximal_logprobs_t if available
+            if resp.proximal_logprobs_t:
+                proximal_logprobs_t = [0.0] * resp.input_len + resp.proximal_logprobs_t
+                res["proximal_logprobs_t"] = torch.tensor(proximal_logprobs_t).unsqueeze(0)
+
             results.append(res)
 
         if self.dump_dir is not None:

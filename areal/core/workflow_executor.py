@@ -21,7 +21,12 @@ from areal.utils import logging
 from areal.utils.data import concat_padded_tensors, cycle_dataloader
 
 if TYPE_CHECKING:
+    from areal.api.cache_api import RolloutCache
     from areal.api.engine_api import InferenceEngine
+    from areal.api.queue_api import RolloutQueue
+    from areal.api.staleness_control import StalenessControlStrategy
+    from areal.core.filtered_capacity_modifier import FilteredSamplesCapacityModifier
+    from areal.core.proximal_recomputer import ProximalRecomputer
 
 
 def check_trajectory_format(
@@ -207,6 +212,14 @@ def check_trajectory_format(
 
 
 @dataclass
+class _TimedResult:
+    """Result with creation timestamp for cache management."""
+
+    t: int
+    data: dict[str, Any]
+
+
+@dataclass
 class _RolloutTaskInput:
     """Internal wrapper for rollout-specific task input."""
 
@@ -254,6 +267,12 @@ class WorkflowExecutor:
         config: InferenceEngineConfig,
         inference_engine: InferenceEngine,
         staleness_manager: StalenessManager | None = None,
+        output_queue: "RolloutQueue | None" = None,
+        result_cache: "RolloutCache | None" = None,
+        staleness_strategy: "StalenessControlStrategy | None" = None,
+        proximal_recomputer: "ProximalRecomputer | None" = None,
+        filtered_capacity_modifier: "FilteredSamplesCapacityModifier | None" = None,
+        logger: Any = None,
     ):
         self.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
@@ -267,6 +286,27 @@ class WorkflowExecutor:
         # The manager will be properly initialized in initialize()
         self.staleness_manager = staleness_manager
 
+        # Segment-wise PPO components (injected via factory or None for standard PPO)
+        self.staleness_strategy = staleness_strategy
+        self.proximal_recomputer = proximal_recomputer
+        self.filtered_capacity_modifier = filtered_capacity_modifier
+
+        # Output queue and result cache (optional, for segment-wise PPO)
+        # If provided, we use them; if None, we use internal list
+        self.output_queue = output_queue
+        self.result_cache = result_cache
+
+        # Track last purged version for queue purging (segment-wise PPO)
+        self._last_purged_version = -1
+
+        # Metrics tracking for observability
+        self._metrics_filtered_total = 0
+        self._metrics_accepted_total = 0
+        self._metrics_rejected_total = 0
+
+        # Logger (will be set in initialize if None)
+        self.logger = logger
+
         # Create the generic async task runner
         qsize = config.queue_size or self.max_concurrent_rollouts * 16
         self.runner = AsyncTaskRunner[dict[str, Any] | None](
@@ -278,6 +318,7 @@ class WorkflowExecutor:
         self._expected_trajectory_keys: set | None = None
 
         # Cache for tracking inputs and accepted/rejected results
+        # These are used when output_queue/result_cache are None (standard PPO)
         self._pending_results: list[dict[str, Any]] = []
         self._pending_inputs: list[_RolloutTaskInput] = []
 
@@ -293,9 +334,11 @@ class WorkflowExecutor:
             Data parallel world size for capacity scaling. If None, will be inferred
             from distributed state.
         """
-        if logger is None:
-            logger = logging.getLogger(__name__)
-        self.logger = logger
+        # Set logger if not already set in constructor
+        if logger is not None:
+            self.logger = logger
+        elif self.logger is None:
+            self.logger = logging.getLogger(__name__)
 
         # Initialize staleness manager if not provided
         if self.staleness_manager is None:
@@ -320,6 +363,7 @@ class WorkflowExecutor:
                 max_concurrent_rollouts=max_concurrent_rollouts,
                 consumer_batch_size=consumer_batch_size,
                 max_staleness=self.config.max_head_offpolicyness,
+                logger=self.logger,
             )
 
         # Initialize the generic async task runner
@@ -398,6 +442,54 @@ class WorkflowExecutor:
             should_accept_traj = traj is not None and (
                 task_input.should_accept is None or task_input.should_accept(traj)
             )
+
+            # Staleness filtering and proximal recomputation (segment-wise PPO)
+            if should_accept_traj and self.staleness_strategy is not None:
+                current_ver = self.inference_engine.get_version()
+
+                # Pre-enqueue staleness check
+                from tensordict import TensorDict
+
+                if not isinstance(traj, TensorDict):
+                    traj = TensorDict(traj, batch_size=[])
+
+                # Extract version info for logging
+                sample_version = -1
+                if "versions" in traj.keys():
+                    versions = traj.get("versions")
+                    if versions is not None:
+                        sample_version = versions[0, 0].item() if versions.numel() > 0 else -1
+
+                should_enqueue = not self.staleness_strategy.is_sample_too_stale(
+                    traj, current_ver, self.config
+                )
+
+                if should_enqueue:
+                    # Add proximal logprobs if recomputer exists
+                    if self.proximal_recomputer:
+                        traj = self.proximal_recomputer.add_proximal_logprobs(
+                            traj, current_ver
+                        )
+                    # Log acceptance
+                    self._metrics_accepted_total += 1
+                    self.logger.debug(
+                        f"[StalenessFilter] Sample accepted: version={sample_version}, "
+                        f"current_ver={current_ver}, staleness={current_ver - sample_version}, "
+                        f"total_accepted={self._metrics_accepted_total}"
+                    )
+                else:
+                    # Filtered due to staleness - mark as rejected
+                    self._metrics_filtered_total += 1
+                    self.logger.debug(
+                        f"[StalenessFilter] Sample filtered due to staleness: version={sample_version}, "
+                        f"current_ver={current_ver}, staleness={current_ver - sample_version}, "
+                        f"total_filtered={self._metrics_filtered_total}"
+                    )
+                    if self.filtered_capacity_modifier:
+                        self.filtered_capacity_modifier.on_samples_filtered(
+                            1, current_ver
+                        )
+                    should_accept_traj = False
 
             # Notify staleness manager
             if should_accept_traj:
@@ -478,6 +570,19 @@ class WorkflowExecutor:
         """
         start_time = time.perf_counter()
         timeout = timeout or float(7 * 24 * 3600)
+        current_ver = self.inference_engine.get_version()
+
+        # Step 1: Purge stale samples from queue (segment-wise PPO only)
+        if self.staleness_strategy and self.output_queue:
+            self._last_purged_version = self.staleness_strategy.purge_stale_samples_from_queue(
+                output_queue=self.output_queue,
+                current_ver=current_ver,
+                last_purged_ver=self._last_purged_version,
+                inference_engine=self.inference_engine,
+                result_cache=self.result_cache,
+                config=self.config,
+                logger=self.logger,
+            )
 
         # Keep requesting results from runner until we have enough accepted
         # (non-None) results. Use short timeout (1 second) for each wait call
@@ -493,21 +598,67 @@ class WorkflowExecutor:
                     break
                 self._commit_one_to_runner()
 
-            if len(self._pending_results) >= count:
+            # Step 2: Drain queue to cache (segment-wise PPO)
+            if self.output_queue:
+                while True:
+                    try:
+                        timed_result = self.output_queue.get_nowait()
+                        # Add to result cache
+                        if self.result_cache and hasattr(self.result_cache, 'add'):
+                            self.result_cache.add(timed_result)
+                        elif self.result_cache:
+                            # Fallback for list-like cache
+                            self.result_cache.append(timed_result)
+                    except queue.Empty:
+                        break
+
+            # Step 3: Filter stale from cache (segment-wise PPO)
+            if self.staleness_strategy and self.result_cache:
+                dropped_cache = self.staleness_strategy.filter_stale_from_cache(
+                    result_cache=self.result_cache,
+                    current_ver=current_ver,
+                    config=self.config,
+                    logger=self.logger,
+                )
+                if dropped_cache > 0 and self.filtered_capacity_modifier:
+                    self.filtered_capacity_modifier.on_samples_filtered(
+                        dropped_cache, current_ver
+                    )
+
+            # Check if we have enough results
+            # For segment-wise PPO (with result_cache), check cache size
+            cache_size = None
+            if self.result_cache:
+                cache_size = (
+                    self.result_cache.size()
+                    if hasattr(self.result_cache, 'size')
+                    else len(self.result_cache)
+                )
+                if cache_size >= count:
+                    break
+            # For standard PPO (without result_cache), check pending results
+            elif len(self._pending_results) >= count:
                 break
 
             elapsed = time.perf_counter() - start_time
             remaining_timeout = timeout - elapsed
 
             if remaining_timeout <= 0:
+                actual_count = (
+                    cache_size if cache_size is not None
+                    else len(self._pending_results)
+                )
                 raise TimeoutError(
                     f"Timed out waiting for {count} rollouts, only received "
-                    f"{len(self._pending_results)}."
+                    f"{actual_count}."
                 )
 
             # Try to get at least the number we still need, but request at least 1
             # Note: runner.wait() might return fewer due to rejections (None results)
-            needed = max(1, count - len(self._pending_results))
+            if cache_size is not None:
+                needed = max(1, count - cache_size)
+            else:
+                needed = max(1, count - len(self._pending_results))
 
             try:
                 # Use short timeout to allow periodic returns (matches original
@@ -520,22 +671,70 @@ class WorkflowExecutor:
                 # runner.wait() returns List[T] where T can be None for
                 # rejected rollouts
                 accepted = [result for result in batch if result is not None]
-                self._pending_results.extend(accepted)
+
+                # For segment-wise PPO, add to output queue as TimedResult
+                if self.output_queue:
+                    for result in accepted:
+                        timed_result = _TimedResult(
+                            t=time.monotonic_ns(),
+                            data=result
+                        )
+                        try:
+                            self.output_queue.put_nowait(timed_result)
+                        except queue.Full:
+                            raise RuntimeError(
+                                "Output queue full. Please increase queue_size."
+                            )
+                # For standard PPO, add directly to pending results
+                else:
+                    self._pending_results.extend(accepted)
             except TimeoutError:
                 pass
 
         if self.config.enable_rollout_tracing:
             self.logger.info("Rollout results are ready!")
 
+        # Log staleness filtering metrics (segment-wise PPO)
+        if self.staleness_strategy is not None and self._metrics_filtered_total > 0:
+            self.logger.info(
+                f"[StalenessMetrics] Total samples: "
+                f"filtered={self._metrics_filtered_total}, "
+                f"accepted={self._metrics_accepted_total}, "
+                f"filter_rate={self._metrics_filtered_total / (self._metrics_filtered_total + self._metrics_accepted_total):.2%}"
+            )
+
         # Extract requested number of results
-        results = self._pending_results[:count]
-        self._pending_results = self._pending_results[count:]
+        # For segment-wise PPO (with result_cache)
+        if self.result_cache:
+            # Take results from cache
+            if hasattr(self.result_cache, 'take_first_n'):
+                # Using RolloutCache abstraction
+                results = self.result_cache.take_first_n(count)
+            else:
+                # Using list
+                self.result_cache.sort(key=lambda x: x.t)
+                results, remaining = (
+                    self.result_cache[:count],
+                    self.result_cache[count:],
+                )
+                # Update result_cache reference if it's a list
+                if isinstance(self.result_cache, list):
+                    self.result_cache[:] = remaining
+                else:
+                    self.result_cache = remaining
 
-        # Shuffle for randomness (helps with data diversity)
-        random.shuffle(results)
+            random.shuffle(results)
+            return concat_padded_tensors([r.data for r in results])
+        # For standard PPO (without result_cache)
+        else:
+            results = self._pending_results[:count]
+            self._pending_results = self._pending_results[count:]
 
-        # Concatenate into batch tensor format
-        return concat_padded_tensors(results)
+            # Shuffle for randomness (helps with data diversity)
+            random.shuffle(results)
+
+            # Concatenate into batch tensor format
+            return concat_padded_tensors(results)
 
     def rollout_batch(
         self,

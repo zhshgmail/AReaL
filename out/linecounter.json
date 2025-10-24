@@ -1,0 +1,3604 @@
+{
+    "extension": "linecounter",
+    "version": "0.2.7",
+    "workspace": "d:\\workspace\\ai\\oss\\AReaL",
+    "linecount": [
+        {
+            "version": "0.2.7",
+            "counttime": "2025-10-09 17:26:36",
+            "filesum": 566,
+            "codesum": 118504,
+            "commentsum": 5350,
+            "blanksum": 15724,
+            "statistics": {
+                ".txt": {
+                    "code": 1462,
+                    "comment": 5,
+                    "blank": 54
+                },
+                "": {
+                    "code": 1333,
+                    "comment": 83,
+                    "blank": 239
+                },
+                ".py": {
+                    "code": 102245,
+                    "comment": 4959,
+                    "blank": 13403
+                },
+                ".md": {
+                    "code": 2848,
+                    "comment": 97,
+                    "blank": 907
+                },
+                ".toml": {
+                    "code": 138,
+                    "comment": 0,
+                    "blank": 19
+                },
+                ".ini": {
+                    "code": 4,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".in": {
+                    "code": 11,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".yml": {
+                    "code": 290,
+                    "comment": 5,
+                    "blank": 53
+                },
+                ".yaml": {
+                    "code": 2004,
+                    "comment": 8,
+                    "blank": 90
+                },
+                ".ipynb": {
+                    "code": 2628,
+                    "comment": 0,
+                    "blank": 138
+                },
+                ".json": {
+                    "code": 19,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".html": {
+                    "code": 1259,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".sh": {
+                    "code": 411,
+                    "comment": 61,
+                    "blank": 65
+                },
+                ".js": {
+                    "code": 550,
+                    "comment": 99,
+                    "blank": 96
+                },
+                ".g4": {
+                    "code": 536,
+                    "comment": 23,
+                    "blank": 94
+                },
+                ".cfg": {
+                    "code": 3,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".cu": {
+                    "code": 288,
+                    "comment": 4,
+                    "blank": 39
+                },
+                ".cpp": {
+                    "code": 21,
+                    "comment": 2,
+                    "blank": 6
+                },
+                ".jsonl": {
+                    "code": 809,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".css": {
+                    "code": 188,
+                    "comment": 3,
+                    "blank": 186
+                },
+                ".tokens": {
+                    "code": 714,
+                    "comment": 0,
+                    "blank": 0
+                },
+                ".interp": {
+                    "code": 739,
+                    "comment": 0,
+                    "blank": 335
+                },
+                ".TAG": {
+                    "code": 4,
+                    "comment": 1,
+                    "blank": 0
+                }
+            },
+            "filelist": [
+                {
+                    "blank": 0,
+                    "code": 95,
+                    "comment": 0,
+                    "filename": ".clang-format"
+                },
+                {
+                    "filename": ".coverage",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 17,
+                    "code": 88,
+                    "comment": 0,
+                    "filename": ".dockerignore"
+                },
+                {
+                    "blank": 15,
+                    "code": 23,
+                    "comment": 0,
+                    "filename": ".github\\ISSUE_TEMPLATE\\bug.md"
+                },
+                {
+                    "blank": 9,
+                    "code": 22,
+                    "comment": 0,
+                    "filename": ".github\\ISSUE_TEMPLATE\\doc.md"
+                },
+                {
+                    "blank": 10,
+                    "code": 19,
+                    "comment": 0,
+                    "filename": ".github\\ISSUE_TEMPLATE\\feature.md"
+                },
+                {
+                    "blank": 5,
+                    "code": 16,
+                    "comment": 0,
+                    "filename": ".github\\ISSUE_TEMPLATE\\refactor.md"
+                },
+                {
+                    "blank": 11,
+                    "code": 57,
+                    "comment": 0,
+                    "filename": ".github\\workflows\\deploy-docs.yml"
+                },
+                {
+                    "blank": 8,
+                    "code": 23,
+                    "comment": 0,
+                    "filename": ".github\\workflows\\format-check.yml"
+                },
+                {
+                    "blank": 19,
+                    "code": 102,
+                    "comment": 0,
+                    "filename": ".github\\workflows\\installation-validation.yml"
+                },
+                {
+                    "blank": 8,
+                    "code": 36,
+                    "comment": 0,
+                    "filename": ".github\\workflows\\test-areal.yml"
+                },
+                {
+                    "blank": 17,
+                    "code": 91,
+                    "comment": 0,
+                    "filename": ".gitignore"
+                },
+                {
+                    "blank": 8,
+                    "code": 81,
+                    "comment": 8,
+                    "filename": ".pre-commit-config.yaml"
+                },
+                {
+                    "blank": 0,
+                    "code": 2,
+                    "comment": 0,
+                    "filename": ".pytest_cache\\.gitignore"
+                },
+                {
+                    "blank": 0,
+                    "code": 4,
+                    "comment": 1,
+                    "filename": ".pytest_cache\\CACHEDIR.TAG"
+                },
+                {
+                    "blank": 1,
+                    "code": 2,
+                    "comment": 0,
+                    "filename": ".pytest_cache\\README.md"
+                },
+                {
+                    "blank": 0,
+                    "code": 18,
+                    "comment": 0,
+                    "filename": ".pytest_cache\\v\\cache\\lastfailed"
+                },
+                {
+                    "blank": 1,
+                    "code": 215,
+                    "comment": 0,
+                    "filename": ".pytest_cache\\v\\cache\\nodeids"
+                },
+                {
+                    "filename": "areal\\api\\__pycache__\\cli_args.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\api\\__pycache__\\engine_api.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\api\\__pycache__\\io_struct.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\api\\__pycache__\\workflow_api.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 102,
+                    "code": 707,
+                    "comment": 28,
+                    "filename": "areal\\api\\cli_args.py"
+                },
+                {
+                    "blank": 65,
+                    "code": 129,
+                    "comment": 4,
+                    "filename": "areal\\api\\engine_api.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 9,
+                    "comment": 0,
+                    "filename": "areal\\api\\env_api.py"
+                },
+                {
+                    "blank": 52,
+                    "code": 255,
+                    "comment": 23,
+                    "filename": "areal\\api\\io_struct.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 42,
+                    "comment": 0,
+                    "filename": "areal\\api\\reward_api.py"
+                },
+                {
+                    "blank": 131,
+                    "code": 733,
+                    "comment": 48,
+                    "filename": "areal\\api\\workflow_api.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 47,
+                    "comment": 0,
+                    "filename": "areal\\dataset\\__init__.py"
+                },
+                {
+                    "blank": 19,
+                    "code": 99,
+                    "comment": 1,
+                    "filename": "areal\\dataset\\clevr_count_70k.py"
+                },
+                {
+                    "blank": 20,
+                    "code": 114,
+                    "comment": 2,
+                    "filename": "areal\\dataset\\geometry3k.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 22,
+                    "comment": 0,
+                    "filename": "areal\\dataset\\gsm8k.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "areal\\engine\\__init__.py"
+                },
+                {
+                    "filename": "areal\\engine\\__pycache__\\__init__.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\engine\\__pycache__\\sglang_remote.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 60,
+                    "code": 380,
+                    "comment": 27,
+                    "filename": "areal\\engine\\base_hf_engine.py"
+                },
+                {
+                    "blank": 40,
+                    "code": 236,
+                    "comment": 19,
+                    "filename": "areal\\engine\\fsdp_engine.py"
+                },
+                {
+                    "filename": "areal\\engine\\ppo\\__pycache__\\actor.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 41,
+                    "code": 322,
+                    "comment": 21,
+                    "filename": "areal\\engine\\ppo\\actor.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 67,
+                    "comment": 1,
+                    "filename": "areal\\engine\\sft\\lm_engine.py"
+                },
+                {
+                    "blank": 82,
+                    "code": 389,
+                    "comment": 58,
+                    "filename": "areal\\engine\\sglang_remote.py"
+                },
+                {
+                    "blank": 19,
+                    "code": 105,
+                    "comment": 4,
+                    "filename": "areal\\experimental\\autotp_engine.py"
+                },
+                {
+                    "blank": 62,
+                    "code": 301,
+                    "comment": 10,
+                    "filename": "areal\\experimental\\sglang_engine.py"
+                },
+                {
+                    "blank": 24,
+                    "code": 110,
+                    "comment": 11,
+                    "filename": "areal\\experimental\\tests\\test_sglang_local_engine.py"
+                },
+                {
+                    "blank": 36,
+                    "code": 320,
+                    "comment": 8,
+                    "filename": "areal\\launcher\\local.py"
+                },
+                {
+                    "blank": 49,
+                    "code": 368,
+                    "comment": 30,
+                    "filename": "areal\\launcher\\ray.py"
+                },
+                {
+                    "blank": 28,
+                    "code": 153,
+                    "comment": 4,
+                    "filename": "areal\\launcher\\sglang_server.py"
+                },
+                {
+                    "blank": 65,
+                    "code": 433,
+                    "comment": 19,
+                    "filename": "areal\\launcher\\slurm.py"
+                },
+                {
+                    "blank": 43,
+                    "code": 154,
+                    "comment": 1,
+                    "filename": "areal\\README.md"
+                },
+                {
+                    "blank": 4,
+                    "code": 13,
+                    "comment": 0,
+                    "filename": "areal\\reward\\__init__.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 19,
+                    "comment": 1,
+                    "filename": "areal\\reward\\clevr_count_70k.py"
+                },
+                {
+                    "blank": 6,
+                    "code": 21,
+                    "comment": 3,
+                    "filename": "areal\\reward\\geometry3k.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 54,
+                    "comment": 0,
+                    "filename": "areal\\tests\\grpo\\config.yaml"
+                },
+                {
+                    "blank": 31,
+                    "code": 117,
+                    "comment": 0,
+                    "filename": "areal\\tests\\grpo\\entrypoint.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 23,
+                    "comment": 1,
+                    "filename": "areal\\tests\\grpo\\test_grpo.py"
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_behav_imp_weight_floor.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_behav_imp_weight_floor.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_grpo_loss_logp_alignment.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_grpo_loss_logp_alignment.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_ppo_functional_coverage.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_proximal_t_generation_simple.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_proximal_t_generation_simple.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_recompute_timing.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_recompute_timing.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_workflow_executor_wait.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_workflow_executor_wait.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_workflow_helper_functions.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_workflow_helper_functions.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_workflow_wait_bugfixes.cpython-310-pytest-8.4.0.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\__pycache__\\test_workflow_wait_bugfixes.cpython-310-pytest-8.4.2.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 68,
+                    "code": 199,
+                    "comment": 49,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_behav_imp_weight_floor.py"
+                },
+                {
+                    "blank": 37,
+                    "code": 34,
+                    "comment": 25,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_grpo_loss_logp_alignment.py"
+                },
+                {
+                    "blank": 86,
+                    "code": 218,
+                    "comment": 42,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_ppo_functional_coverage.py"
+                },
+                {
+                    "blank": 43,
+                    "code": 95,
+                    "comment": 50,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_proximal_t_generation_simple.py"
+                },
+                {
+                    "blank": 112,
+                    "code": 216,
+                    "comment": 71,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_recompute_timing.py"
+                },
+                {
+                    "blank": 174,
+                    "code": 313,
+                    "comment": 70,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_workflow_executor_wait.py"
+                },
+                {
+                    "blank": 170,
+                    "code": 338,
+                    "comment": 55,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_workflow_helper_functions.py"
+                },
+                {
+                    "blank": 121,
+                    "code": 174,
+                    "comment": 66,
+                    "filename": "areal\\tests\\seg_decoupled_ppo\\test_workflow_wait_bugfixes.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 36,
+                    "comment": 0,
+                    "filename": "areal\\tests\\sft\\config.yaml"
+                },
+                {
+                    "blank": 19,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "areal\\tests\\sft\\entrypoint.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 18,
+                    "comment": 0,
+                    "filename": "areal\\tests\\sft\\ref_losses.json"
+                },
+                {
+                    "blank": 8,
+                    "code": 29,
+                    "comment": 2,
+                    "filename": "areal\\tests\\sft\\test_sft.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 103,
+                    "comment": 6,
+                    "filename": "areal\\tests\\test_fsdp_engine_nccl.py"
+                },
+                {
+                    "blank": 32,
+                    "code": 173,
+                    "comment": 11,
+                    "filename": "areal\\tests\\test_sglang_engine.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 125,
+                    "comment": 2,
+                    "filename": "areal\\tests\\test_train_engine.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 55,
+                    "comment": 4,
+                    "filename": "areal\\tests\\test_utils.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 36,
+                    "comment": 0,
+                    "filename": "areal\\tests\\test_wrapper.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "areal\\utils\\__init__.py"
+                },
+                {
+                    "filename": "areal\\utils\\__pycache__\\__init__.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\utils\\__pycache__\\data.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\utils\\__pycache__\\fs.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\utils\\__pycache__\\functional.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\utils\\__pycache__\\http.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "areal\\utils\\__pycache__\\network.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 80,
+                    "code": 411,
+                    "comment": 29,
+                    "filename": "areal\\utils\\data.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 22,
+                    "comment": 1,
+                    "filename": "areal\\utils\\device.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 53,
+                    "comment": 9,
+                    "filename": "areal\\utils\\distributed.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 29,
+                    "comment": 0,
+                    "filename": "areal\\utils\\evaluator.py"
+                },
+                {
+                    "blank": 2,
+                    "code": 7,
+                    "comment": 0,
+                    "filename": "areal\\utils\\fs.py"
+                },
+                {
+                    "blank": 31,
+                    "code": 130,
+                    "comment": 3,
+                    "filename": "areal\\utils\\fsdp.py"
+                },
+                {
+                    "blank": 29,
+                    "code": 155,
+                    "comment": 39,
+                    "filename": "areal\\utils\\functional.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 78,
+                    "comment": 0,
+                    "filename": "areal\\utils\\http.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 28,
+                    "comment": 0,
+                    "filename": "areal\\utils\\image.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 90,
+                    "comment": 2,
+                    "filename": "areal\\utils\\launcher.py"
+                },
+                {
+                    "blank": 5,
+                    "code": 11,
+                    "comment": 5,
+                    "filename": "areal\\utils\\model.py"
+                },
+                {
+                    "blank": 22,
+                    "code": 52,
+                    "comment": 6,
+                    "filename": "areal\\utils\\network.py"
+                },
+                {
+                    "blank": 4,
+                    "code": 19,
+                    "comment": 1,
+                    "filename": "areal\\utils\\ray.py"
+                },
+                {
+                    "blank": 42,
+                    "code": 306,
+                    "comment": 13,
+                    "filename": "areal\\utils\\recover.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 66,
+                    "comment": 4,
+                    "filename": "areal\\utils\\save_load.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 108,
+                    "comment": 0,
+                    "filename": "areal\\utils\\saver.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 107,
+                    "comment": 0,
+                    "filename": "areal\\utils\\slurm.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 85,
+                    "comment": 2,
+                    "filename": "areal\\utils\\stats_logger.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 35,
+                    "comment": 0,
+                    "filename": "areal\\utils\\wrapper.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 141,
+                    "comment": 13,
+                    "filename": "areal\\workflow\\multi_turn.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 108,
+                    "comment": 4,
+                    "filename": "areal\\workflow\\rlvr.py"
+                },
+                {
+                    "blank": 18,
+                    "code": 108,
+                    "comment": 4,
+                    "filename": "areal\\workflow\\vision_rlvr.py"
+                },
+                {
+                    "filename": "assets\\1.5b_time_n1n4n16.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\7b_zero_eval_acc.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\7b_zero_training_curve.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\algo_ablation.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\arch.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\areal_lite_layers.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\async_scaling_vs_verl.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\async_timeline.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\decoupled_ppo_obj.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\distill_1.5b_24k_curve.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\gen_scaling_trend.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\gsm8k_2.5-1.5b-ins_training_curve.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\interrupt_gen_ablation.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\logo.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\logo_lite.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\staleness_throughput.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\sync_one_step_gen.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\thpt_comparison.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "assets\\wechat_qrcode.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 0,
+                    "code": 41,
+                    "comment": 0,
+                    "filename": "benchmark\\verl_v0_3_0_post1_76084d3\\areal_config.yaml"
+                },
+                {
+                    "blank": 27,
+                    "code": 87,
+                    "comment": 5,
+                    "filename": "benchmark\\verl_v0_3_0_post1_76084d3\\build_cmd.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 28,
+                    "comment": 2,
+                    "filename": "benchmark\\verl_v0_3_0_post1_76084d3\\README.md"
+                },
+                {
+                    "filename": "benchmark\\verl_v0_3_0_post1_76084d3\\scaling_trend_vs_verl.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 14,
+                    "code": 30,
+                    "comment": 7,
+                    "filename": "blog\\AReaL_v0_1.md"
+                },
+                {
+                    "blank": 45,
+                    "code": 77,
+                    "comment": 10,
+                    "filename": "blog\\AReaL_v0_2.md"
+                },
+                {
+                    "blank": 65,
+                    "code": 192,
+                    "comment": 10,
+                    "filename": "blog\\AReaL_v0_3.md"
+                },
+                {
+                    "blank": 25,
+                    "code": 74,
+                    "comment": 0,
+                    "filename": "CHANGES_SUMMARY.md"
+                },
+                {
+                    "blank": 96,
+                    "code": 1776,
+                    "comment": 0,
+                    "filename": "compare_vllm_sglang.ipynb"
+                },
+                {
+                    "blank": 14,
+                    "code": 201,
+                    "comment": 2,
+                    "filename": "csrc\\cugae\\gae.cu"
+                },
+                {
+                    "blank": 6,
+                    "code": 21,
+                    "comment": 2,
+                    "filename": "csrc\\interval_op\\interval_op.cpp"
+                },
+                {
+                    "blank": 25,
+                    "code": 87,
+                    "comment": 2,
+                    "filename": "csrc\\interval_op\\interval_op.cu"
+                },
+                {
+                    "blank": 11,
+                    "code": 69,
+                    "comment": 10,
+                    "filename": "Dockerfile"
+                },
+                {
+                    "blank": 6,
+                    "code": 27,
+                    "comment": 4,
+                    "filename": "docs\\_config.yml"
+                },
+                {
+                    "blank": 1,
+                    "code": 45,
+                    "comment": 1,
+                    "filename": "docs\\_toc.yml"
+                },
+                {
+                    "blank": 10,
+                    "code": 22,
+                    "comment": 1,
+                    "filename": "docs\\contrib.md"
+                },
+                {
+                    "blank": 12,
+                    "code": 39,
+                    "comment": 0,
+                    "filename": "docs\\customization\\agent.md"
+                },
+                {
+                    "blank": 26,
+                    "code": 87,
+                    "comment": 0,
+                    "filename": "docs\\customization\\algorithm.md"
+                },
+                {
+                    "blank": 18,
+                    "code": 103,
+                    "comment": 0,
+                    "filename": "docs\\customization\\dataset.md"
+                },
+                {
+                    "filename": "docs\\developer\\areal_code_arch.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 6,
+                    "code": 9,
+                    "comment": 0,
+                    "filename": "docs\\developer\\overview.md"
+                },
+                {
+                    "blank": 2,
+                    "code": 3,
+                    "comment": 0,
+                    "filename": "docs\\developer\\rollout.md"
+                },
+                {
+                    "filename": "docs\\developer\\rollout\\areal_rollout_manager.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 3,
+                    "code": 4,
+                    "comment": 0,
+                    "filename": "docs\\developer\\rollout\\gserver.md"
+                },
+                {
+                    "blank": 7,
+                    "code": 8,
+                    "comment": 0,
+                    "filename": "docs\\developer\\rollout\\rollout_worker.md"
+                },
+                {
+                    "filename": "docs\\developer\\rollout\\rollout_worker.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 4,
+                    "code": 5,
+                    "comment": 0,
+                    "filename": "docs\\developer\\trainer.md"
+                },
+                {
+                    "blank": 26,
+                    "code": 72,
+                    "comment": 0,
+                    "filename": "docs\\developer\\trainer\\algo_interface.md"
+                },
+                {
+                    "filename": "docs\\developer\\trainer\\algo_interface.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 5,
+                    "code": 12,
+                    "comment": 0,
+                    "filename": "docs\\developer\\trainer\\allocation_parallel.md"
+                },
+                {
+                    "filename": "docs\\developer\\trainer\\buffer_arch.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "docs\\developer\\trainer\\master-model-interaction.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "docs\\developer\\trainer\\master_arch.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 10,
+                    "code": 18,
+                    "comment": 0,
+                    "filename": "docs\\developer\\trainer\\master_worker.md"
+                },
+                {
+                    "blank": 17,
+                    "code": 31,
+                    "comment": 0,
+                    "filename": "docs\\developer\\trainer\\model_worker.md"
+                },
+                {
+                    "filename": "docs\\developer\\trainer\\param_shard.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "docs\\figures\\logo.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 1,
+                    "code": 2,
+                    "comment": 0,
+                    "filename": "docs\\intro.md"
+                },
+                {
+                    "blank": 8,
+                    "code": 28,
+                    "comment": 0,
+                    "filename": "docs\\legacy\\customization\\agent.md"
+                },
+                {
+                    "blank": 29,
+                    "code": 99,
+                    "comment": 0,
+                    "filename": "docs\\legacy\\customization\\algorithm.md"
+                },
+                {
+                    "blank": 3,
+                    "code": 8,
+                    "comment": 0,
+                    "filename": "docs\\legacy\\customization\\dataset.md"
+                },
+                {
+                    "filename": "docs\\legacy\\customization\\decoupled_loss.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "docs\\legacy\\customization\\multiturn_reward.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 88,
+                    "code": 503,
+                    "comment": 12,
+                    "filename": "docs\\lite\\gsm8k_grpo.md"
+                },
+                {
+                    "filename": "docs\\lite\\gsm8k_grpo.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 131,
+                    "code": 447,
+                    "comment": 0,
+                    "filename": "docs\\PROXIMAL_T_BUGS_COMPLETE_ANALYSIS.md"
+                },
+                {
+                    "blank": 1,
+                    "code": 2,
+                    "comment": 1,
+                    "filename": "docs\\references\\benchmark.md"
+                },
+                {
+                    "blank": 10,
+                    "code": 32,
+                    "comment": 7,
+                    "filename": "docs\\references\\reproduce.md"
+                },
+                {
+                    "blank": 0,
+                    "code": 3,
+                    "comment": 0,
+                    "filename": "docs\\requirements.txt"
+                },
+                {
+                    "blank": 2,
+                    "code": 4,
+                    "comment": 0,
+                    "filename": "docs\\tutorial\\eval.md"
+                },
+                {
+                    "blank": 28,
+                    "code": 77,
+                    "comment": 6,
+                    "filename": "docs\\tutorial\\installation.md"
+                },
+                {
+                    "blank": 1,
+                    "code": 6,
+                    "comment": 0,
+                    "filename": "docs\\tutorial\\quickstart.md"
+                },
+                {
+                    "blank": 26,
+                    "code": 99,
+                    "comment": 2,
+                    "filename": "docs\\tutorial\\quickstart_legacy.md"
+                },
+                {
+                    "blank": 18,
+                    "code": 39,
+                    "comment": 0,
+                    "filename": "docs\\tutorial\\troubleshooting.md"
+                },
+                {
+                    "blank": 11,
+                    "code": 35,
+                    "comment": 2,
+                    "filename": "evaluation\\aggregate_acc_from_generated.py"
+                },
+                {
+                    "blank": 73,
+                    "code": 261,
+                    "comment": 10,
+                    "filename": "evaluation\\cf_elo_caculator.py"
+                },
+                {
+                    "blank": 70,
+                    "code": 363,
+                    "comment": 62,
+                    "filename": "evaluation\\code_eval.py"
+                },
+                {
+                    "blank": 39,
+                    "code": 163,
+                    "comment": 1,
+                    "filename": "evaluation\\code_verifier\\local_verify.py"
+                },
+                {
+                    "blank": 121,
+                    "code": 601,
+                    "comment": 62,
+                    "filename": "evaluation\\code_verifier\\testing_util.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 30,
+                    "comment": 0,
+                    "filename": "evaluation\\data\\aime24\\test.jsonl"
+                },
+                {
+                    "blank": 0,
+                    "code": 30,
+                    "comment": 0,
+                    "filename": "evaluation\\data\\aime25\\test.jsonl"
+                },
+                {
+                    "blank": 0,
+                    "code": 40,
+                    "comment": 0,
+                    "filename": "evaluation\\data\\amc23\\test.jsonl"
+                },
+                {
+                    "blank": 0,
+                    "code": 198,
+                    "comment": 0,
+                    "filename": "evaluation\\data\\gpqa_diamond\\test.jsonl"
+                },
+                {
+                    "blank": 0,
+                    "code": 500,
+                    "comment": 0,
+                    "filename": "evaluation\\data\\math_500\\test.jsonl"
+                },
+                {
+                    "blank": 6,
+                    "code": 75,
+                    "comment": 6,
+                    "filename": "evaluation\\data_loader.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 31,
+                    "comment": 12,
+                    "filename": "evaluation\\eval.sh"
+                },
+                {
+                    "blank": 52,
+                    "code": 299,
+                    "comment": 5,
+                    "filename": "evaluation\\eval_and_aggregate.py"
+                },
+                {
+                    "blank": 62,
+                    "code": 305,
+                    "comment": 13,
+                    "filename": "evaluation\\eval_and_aggregate_debug.py"
+                },
+                {
+                    "blank": 18,
+                    "code": 109,
+                    "comment": 4,
+                    "filename": "evaluation\\evaluate.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 370,
+                    "comment": 1,
+                    "filename": "evaluation\\examples.py"
+                },
+                {
+                    "blank": 62,
+                    "code": 280,
+                    "comment": 49,
+                    "filename": "evaluation\\grader.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 7,
+                    "comment": 25,
+                    "filename": "evaluation\\latex2sympy\\.coveragerc"
+                },
+                {
+                    "blank": 24,
+                    "code": 108,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\.gitignore"
+                },
+                {
+                    "blank": 0,
+                    "code": 1,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\__init__.py"
+                },
+                {
+                    "filename": "evaluation\\latex2sympy\\antlr-4.11.1-complete.jar",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 14,
+                    "code": 52,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\asciimath_printer.py"
+                },
+                {
+                    "blank": 43,
+                    "code": 103,
+                    "comment": 5,
+                    "filename": "evaluation\\latex2sympy\\description.txt"
+                },
+                {
+                    "blank": 0,
+                    "code": 8,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\dev-requirements.in"
+                },
+                {
+                    "blank": 1,
+                    "code": 59,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\dev-requirements.txt"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\gen\\__init__.py"
+                },
+                {
+                    "blank": 167,
+                    "code": 295,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\gen\\PS.interp"
+                },
+                {
+                    "blank": 0,
+                    "code": 357,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\gen\\PS.tokens"
+                },
+                {
+                    "blank": 168,
+                    "code": 444,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\gen\\PSLexer.interp"
+                },
+                {
+                    "blank": 16,
+                    "code": 24550,
+                    "comment": 2,
+                    "filename": "evaluation\\latex2sympy\\gen\\PSLexer.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 357,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\gen\\PSLexer.tokens"
+                },
+                {
+                    "blank": 191,
+                    "code": 254,
+                    "comment": 128,
+                    "filename": "evaluation\\latex2sympy\\gen\\PSListener.py"
+                },
+                {
+                    "blank": 1060,
+                    "code": 15450,
+                    "comment": 33,
+                    "filename": "evaluation\\latex2sympy\\gen\\PSParser.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\latex2sympy2.egg-info\\dependency_links.txt"
+                },
+                {
+                    "blank": 58,
+                    "code": 172,
+                    "comment": 8,
+                    "filename": "evaluation\\latex2sympy\\latex2sympy2.egg-info\\PKG-INFO"
+                },
+                {
+                    "blank": 0,
+                    "code": 2,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\latex2sympy2.egg-info\\requires.txt"
+                },
+                {
+                    "blank": 0,
+                    "code": 39,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\latex2sympy2.egg-info\\SOURCES.txt"
+                },
+                {
+                    "blank": 0,
+                    "code": 4,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\latex2sympy2.egg-info\\top_level.txt"
+                },
+                {
+                    "blank": 153,
+                    "code": 992,
+                    "comment": 81,
+                    "filename": "evaluation\\latex2sympy\\latex2sympy2.py"
+                },
+                {
+                    "blank": 4,
+                    "code": 17,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\LICENSE.txt"
+                },
+                {
+                    "blank": 94,
+                    "code": 536,
+                    "comment": 23,
+                    "filename": "evaluation\\latex2sympy\\PS.g4"
+                },
+                {
+                    "blank": 57,
+                    "code": 133,
+                    "comment": 7,
+                    "filename": "evaluation\\latex2sympy\\README.md"
+                },
+                {
+                    "blank": 0,
+                    "code": 2,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\requirements.in"
+                },
+                {
+                    "blank": 0,
+                    "code": 12,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\requirements.txt"
+                },
+                {
+                    "blank": 4,
+                    "code": 7,
+                    "comment": 1,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\linalg_equations.py"
+                },
+                {
+                    "blank": 6,
+                    "code": 15,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\linalg_span.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 36,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\matrix.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 51,
+                    "comment": 9,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\matrix_placeholders.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 2,
+                    "comment": 17,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\sandbox.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 56,
+                    "comment": 4,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\sandbox_equality.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 19,
+                    "comment": 26,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\sectan.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 42,
+                    "comment": 18,
+                    "filename": "evaluation\\latex2sympy\\sandbox\\vector.py"
+                },
+                {
+                    "blank": 2,
+                    "code": 4,
+                    "comment": 3,
+                    "filename": "evaluation\\latex2sympy\\scripts\\compile.sh"
+                },
+                {
+                    "blank": 1,
+                    "code": 1,
+                    "comment": 1,
+                    "filename": "evaluation\\latex2sympy\\scripts\\coverage-ci.sh"
+                },
+                {
+                    "blank": 3,
+                    "code": 15,
+                    "comment": 5,
+                    "filename": "evaluation\\latex2sympy\\scripts\\coverage.sh"
+                },
+                {
+                    "blank": 6,
+                    "code": 22,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\scripts\\pre-commit"
+                },
+                {
+                    "blank": 6,
+                    "code": 22,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\scripts\\pre-push"
+                },
+                {
+                    "blank": 0,
+                    "code": 3,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\scripts\\publish.sh"
+                },
+                {
+                    "blank": 0,
+                    "code": 2,
+                    "comment": 1,
+                    "filename": "evaluation\\latex2sympy\\scripts\\setup-hooks.sh"
+                },
+                {
+                    "blank": 7,
+                    "code": 31,
+                    "comment": 4,
+                    "filename": "evaluation\\latex2sympy\\scripts\\setup.sh"
+                },
+                {
+                    "blank": 5,
+                    "code": 21,
+                    "comment": 5,
+                    "filename": "evaluation\\latex2sympy\\scripts\\test.sh"
+                },
+                {
+                    "blank": 0,
+                    "code": 3,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\setup.cfg"
+                },
+                {
+                    "blank": 4,
+                    "code": 37,
+                    "comment": 3,
+                    "filename": "evaluation\\latex2sympy\\setup.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\__init__.py"
+                },
+                {
+                    "blank": 5,
+                    "code": 27,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\abs_test.py"
+                },
+                {
+                    "blank": 6,
+                    "code": 49,
+                    "comment": 18,
+                    "filename": "evaluation\\latex2sympy\\tests\\all_bad_test.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 350,
+                    "comment": 18,
+                    "filename": "evaluation\\latex2sympy\\tests\\all_good_test.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 48,
+                    "comment": 1,
+                    "filename": "evaluation\\latex2sympy\\tests\\atom_expr_test.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 24,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\binomial_test.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 48,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\ceil_test.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 14,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\complex_test.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 76,
+                    "comment": 1,
+                    "filename": "evaluation\\latex2sympy\\tests\\context.py"
+                },
+                {
+                    "blank": 25,
+                    "code": 31,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\exp_test.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 50,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\floor_test.py"
+                },
+                {
+                    "blank": 23,
+                    "code": 215,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\gcd_test.py"
+                },
+                {
+                    "blank": 8,
+                    "code": 12,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\greek_test.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 68,
+                    "comment": 5,
+                    "filename": "evaluation\\latex2sympy\\tests\\grouping_test.py"
+                },
+                {
+                    "blank": 23,
+                    "code": 209,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\lcm_test.py"
+                },
+                {
+                    "blank": 4,
+                    "code": 6,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\left_right_cdot_test.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 21,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\linalg_test.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 86,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\max_test.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 86,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\min_test.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 74,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\mod_test.py"
+                },
+                {
+                    "blank": 4,
+                    "code": 8,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\overline_test.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 12,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\pi_test.py"
+                },
+                {
+                    "blank": 5,
+                    "code": 5,
+                    "comment": 12,
+                    "filename": "evaluation\\latex2sympy\\tests\\trig_test.py"
+                },
+                {
+                    "blank": 43,
+                    "code": 145,
+                    "comment": 0,
+                    "filename": "evaluation\\latex2sympy\\tests\\variable_test.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 4,
+                    "comment": 0,
+                    "filename": "evaluation\\LEGAL.md"
+                },
+                {
+                    "blank": 4,
+                    "code": 17,
+                    "comment": 0,
+                    "filename": "evaluation\\LICENSE"
+                },
+                {
+                    "blank": 81,
+                    "code": 470,
+                    "comment": 44,
+                    "filename": "evaluation\\math_eval.py"
+                },
+                {
+                    "blank": 36,
+                    "code": 209,
+                    "comment": 22,
+                    "filename": "evaluation\\math_utils.py"
+                },
+                {
+                    "blank": 37,
+                    "code": 206,
+                    "comment": 32,
+                    "filename": "evaluation\\model_utils.py"
+                },
+                {
+                    "blank": 86,
+                    "code": 610,
+                    "comment": 64,
+                    "filename": "evaluation\\parser.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 170,
+                    "comment": 15,
+                    "filename": "evaluation\\python_executor.py"
+                },
+                {
+                    "blank": 35,
+                    "code": 96,
+                    "comment": 3,
+                    "filename": "evaluation\\README.md"
+                },
+                {
+                    "blank": 1,
+                    "code": 17,
+                    "comment": 0,
+                    "filename": "evaluation\\requirements.txt"
+                },
+                {
+                    "blank": 19,
+                    "code": 83,
+                    "comment": 1,
+                    "filename": "evaluation\\rm_maj_eval.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 29,
+                    "comment": 5,
+                    "filename": "evaluation\\sh\\eval_greedy.sh"
+                },
+                {
+                    "blank": 9,
+                    "code": 37,
+                    "comment": 6,
+                    "filename": "evaluation\\sh\\eval_sample_with_seed.sh"
+                },
+                {
+                    "blank": 2,
+                    "code": 3,
+                    "comment": 2,
+                    "filename": "evaluation\\sh\\install_deps_and_eval.sh"
+                },
+                {
+                    "blank": 24,
+                    "code": 110,
+                    "comment": 12,
+                    "filename": "evaluation\\trajectory.py"
+                },
+                {
+                    "blank": 57,
+                    "code": 284,
+                    "comment": 5,
+                    "filename": "evaluation\\utils.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\1.5B-distill\\ppo-1.5B-distill-gpus-128.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\1.5B-distill\\ppo-1.5B-distill-gpus-32.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\1.5B-distill\\ppo-1.5B-distill-gpus-8.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\32B-distill\\ppo-32B-distill-gpus-128.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 45,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\32B-distill\\sft-32B-distill-gpus-128.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\7B-distill\\ppo-7B-distill-gpus-128.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\7B-distill\\ppo-7B-distill-gpus-32.yaml"
+                },
+                {
+                    "blank": 1,
+                    "code": 71,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\7B-zero\\ppo-7B-zero-gpus-128.yaml"
+                },
+                {
+                    "blank": 3,
+                    "code": 7,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.2-qwen2-math\\README.md"
+                },
+                {
+                    "blank": 0,
+                    "code": 178,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.3-qwen3-code\\14b.yaml"
+                },
+                {
+                    "blank": 0,
+                    "code": 178,
+                    "comment": 0,
+                    "filename": "examples\\configs\\v0.3-qwen3-code\\8b.yaml"
+                },
+                {
+                    "blank": 29,
+                    "code": 99,
+                    "comment": 5,
+                    "filename": "examples\\data_preprocess\\codeforce_process.py"
+                },
+                {
+                    "blank": 48,
+                    "code": 188,
+                    "comment": 10,
+                    "filename": "examples\\data_preprocess\\math_code_process.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 94,
+                    "comment": 1,
+                    "filename": "examples\\data_preprocess\\math_process.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 57,
+                    "comment": 4,
+                    "filename": "examples\\data_preprocess\\preprocess_training_data.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 12,
+                    "comment": 1,
+                    "filename": "examples\\env\\scripts\\download-dataset.sh"
+                },
+                {
+                    "blank": 1,
+                    "code": 10,
+                    "comment": 1,
+                    "filename": "examples\\env\\scripts\\download-model.sh"
+                },
+                {
+                    "blank": 18,
+                    "code": 152,
+                    "comment": 6,
+                    "filename": "examples\\env\\scripts\\install-dependency.sh"
+                },
+                {
+                    "blank": 0,
+                    "code": 7,
+                    "comment": 2,
+                    "filename": "examples\\env\\scripts\\setup-eval-pip-deps.sh"
+                },
+                {
+                    "blank": 1,
+                    "code": 10,
+                    "comment": 4,
+                    "filename": "examples\\env\\scripts\\setup-pip-deps.sh"
+                },
+                {
+                    "blank": 18,
+                    "code": 257,
+                    "comment": 10,
+                    "filename": "examples\\env\\setup_env_and_start_train.py"
+                },
+                {
+                    "blank": 56,
+                    "code": 159,
+                    "comment": 22,
+                    "filename": "examples\\env\\validate_installation.py"
+                },
+                {
+                    "blank": 46,
+                    "code": 245,
+                    "comment": 13,
+                    "filename": "examples\\lite\\clevr_count_70k_grpo.py"
+                },
+                {
+                    "blank": 22,
+                    "code": 140,
+                    "comment": 5,
+                    "filename": "examples\\lite\\clevr_count_70k_sft.py"
+                },
+                {
+                    "blank": 66,
+                    "code": 750,
+                    "comment": 63,
+                    "filename": "examples\\lite\\config_converter.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 130,
+                    "comment": 0,
+                    "filename": "examples\\lite\\configs\\clevr_count_70k_grpo.yaml"
+                },
+                {
+                    "blank": 9,
+                    "code": 79,
+                    "comment": 0,
+                    "filename": "examples\\lite\\configs\\clevr_count_70k_sft.yaml"
+                },
+                {
+                    "blank": 13,
+                    "code": 129,
+                    "comment": 0,
+                    "filename": "examples\\lite\\configs\\gsm8k_grpo.yaml"
+                },
+                {
+                    "blank": 4,
+                    "code": 20,
+                    "comment": 0,
+                    "filename": "examples\\lite\\configs\\gsm8k_hyperparams.md"
+                },
+                {
+                    "blank": 9,
+                    "code": 80,
+                    "comment": 0,
+                    "filename": "examples\\lite\\configs\\gsm8k_sft.yaml"
+                },
+                {
+                    "blank": 18,
+                    "code": 85,
+                    "comment": 5,
+                    "filename": "examples\\lite\\gsm8k_eval.py"
+                },
+                {
+                    "blank": 42,
+                    "code": 215,
+                    "comment": 37,
+                    "filename": "examples\\lite\\gsm8k_grpo.py"
+                },
+                {
+                    "blank": 21,
+                    "code": 131,
+                    "comment": 5,
+                    "filename": "examples\\lite\\gsm8k_sft.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 17,
+                    "comment": 1,
+                    "filename": "examples\\run_async_ppo.sh"
+                },
+                {
+                    "blank": 0,
+                    "code": 12,
+                    "comment": 1,
+                    "filename": "examples\\run_sft.sh"
+                },
+                {
+                    "blank": 0,
+                    "code": 14,
+                    "comment": 1,
+                    "filename": "examples\\run_sync_ppo.sh"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 1,
+                    "filename": "functioncall\\__init__.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "functioncall\\base\\__init__.py"
+                },
+                {
+                    "blank": 37,
+                    "code": 197,
+                    "comment": 3,
+                    "filename": "functioncall\\base\\call.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 34,
+                    "comment": 3,
+                    "filename": "functioncall\\base\\utils.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "functioncall\\code\\__init__.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 11,
+                    "comment": 11,
+                    "filename": "functioncall\\code\\function\\handler.py"
+                },
+                {
+                    "blank": 124,
+                    "code": 613,
+                    "comment": 61,
+                    "filename": "functioncall\\code\\function\\testing_util.py"
+                },
+                {
+                    "blank": 27,
+                    "code": 126,
+                    "comment": 0,
+                    "filename": "functioncall\\code\\local_verify.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 150,
+                    "comment": 4,
+                    "filename": "functioncall\\code\\verify.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "functioncall\\math\\__init__.py"
+                },
+                {
+                    "blank": 61,
+                    "code": 277,
+                    "comment": 49,
+                    "filename": "functioncall\\math\\function\\grader.py"
+                },
+                {
+                    "blank": 9,
+                    "code": 37,
+                    "comment": 0,
+                    "filename": "functioncall\\math\\function\\handler.py"
+                },
+                {
+                    "blank": 86,
+                    "code": 592,
+                    "comment": 78,
+                    "filename": "functioncall\\math\\function\\parser.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 93,
+                    "comment": 6,
+                    "filename": "functioncall\\math\\verify.py"
+                },
+                {
+                    "blank": 51,
+                    "code": 238,
+                    "comment": 11,
+                    "filename": "functioncall\\test\\performance_eval.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 1,
+                    "comment": 0,
+                    "filename": "functioncall\\test\\test_fail_dataset.jsonl"
+                },
+                {
+                    "blank": 0,
+                    "code": 2,
+                    "comment": 0,
+                    "filename": "htmlcov\\.gitignore"
+                },
+                {
+                    "blank": 0,
+                    "code": 131,
+                    "comment": 0,
+                    "filename": "htmlcov\\class_index.html"
+                },
+                {
+                    "blank": 96,
+                    "code": 550,
+                    "comment": 99,
+                    "filename": "htmlcov\\coverage_html_cb_497bf287.js"
+                },
+                {
+                    "filename": "htmlcov\\favicon_32_cb_58284776.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 0,
+                    "code": 291,
+                    "comment": 0,
+                    "filename": "htmlcov\\function_index.html"
+                },
+                {
+                    "blank": 0,
+                    "code": 111,
+                    "comment": 0,
+                    "filename": "htmlcov\\index.html"
+                },
+                {
+                    "filename": "htmlcov\\keybd_closed_cb_ce680311.png",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 0,
+                    "code": 1,
+                    "comment": 0,
+                    "filename": "htmlcov\\status.json"
+                },
+                {
+                    "blank": 186,
+                    "code": 188,
+                    "comment": 3,
+                    "filename": "htmlcov\\style_cb_dca529e9.css"
+                },
+                {
+                    "blank": 0,
+                    "code": 726,
+                    "comment": 0,
+                    "filename": "htmlcov\\z_2626957db87ffcd7_workflow_api_py.html"
+                },
+                {
+                    "blank": 3,
+                    "code": 4,
+                    "comment": 0,
+                    "filename": "LEGAL.md"
+                },
+                {
+                    "blank": 26,
+                    "code": 150,
+                    "comment": 1,
+                    "filename": "LICENSE"
+                },
+                {
+                    "blank": 1,
+                    "code": 5,
+                    "comment": 0,
+                    "filename": "Makefile"
+                },
+                {
+                    "blank": 0,
+                    "code": 1,
+                    "comment": 0,
+                    "filename": "MANIFEST.in"
+                },
+                {
+                    "blank": 42,
+                    "code": 852,
+                    "comment": 0,
+                    "filename": "notebook\\math_reflection_zh.ipynb"
+                },
+                {
+                    "blank": 19,
+                    "code": 138,
+                    "comment": 0,
+                    "filename": "pyproject.toml"
+                },
+                {
+                    "blank": 0,
+                    "code": 4,
+                    "comment": 0,
+                    "filename": "pytest.ini"
+                },
+                {
+                    "blank": 62,
+                    "code": 188,
+                    "comment": 28,
+                    "filename": "README.md"
+                },
+                {
+                    "blank": 1,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "realhf.egg-info\\dependency_links.txt"
+                },
+                {
+                    "blank": 68,
+                    "code": 250,
+                    "comment": 39,
+                    "filename": "realhf.egg-info\\PKG-INFO"
+                },
+                {
+                    "blank": 2,
+                    "code": 82,
+                    "comment": 0,
+                    "filename": "realhf.egg-info\\requires.txt"
+                },
+                {
+                    "blank": 0,
+                    "code": 1017,
+                    "comment": 0,
+                    "filename": "realhf.egg-info\\SOURCES.txt"
+                },
+                {
+                    "blank": 0,
+                    "code": 15,
+                    "comment": 0,
+                    "filename": "realhf.egg-info\\top_level.txt"
+                },
+                {
+                    "blank": 2,
+                    "code": 1,
+                    "comment": 4,
+                    "filename": "realhf\\__init__.py"
+                },
+                {
+                    "filename": "realhf\\__pycache__\\__init__.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\__pycache__\\version.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 204,
+                    "code": 1213,
+                    "comment": 71,
+                    "filename": "realhf\\api\\cli_args.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 21,
+                    "comment": 4,
+                    "filename": "realhf\\api\\core\\agent_api.py"
+                },
+                {
+                    "blank": 33,
+                    "code": 98,
+                    "comment": 6,
+                    "filename": "realhf\\api\\core\\config.py"
+                },
+                {
+                    "blank": 107,
+                    "code": 653,
+                    "comment": 17,
+                    "filename": "realhf\\api\\core\\data_api.py"
+                },
+                {
+                    "blank": 54,
+                    "code": 168,
+                    "comment": 13,
+                    "filename": "realhf\\api\\core\\dfg.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 26,
+                    "comment": 4,
+                    "filename": "realhf\\api\\core\\env_api.py"
+                },
+                {
+                    "blank": 144,
+                    "code": 572,
+                    "comment": 57,
+                    "filename": "realhf\\api\\core\\model_api.py"
+                },
+                {
+                    "blank": 69,
+                    "code": 395,
+                    "comment": 28,
+                    "filename": "realhf\\api\\core\\system_api.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 4,
+                    "comment": 3,
+                    "filename": "realhf\\api\\from_hf\\__init__.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 105,
+                    "comment": 4,
+                    "filename": "realhf\\api\\from_hf\\gemma.py"
+                },
+                {
+                    "blank": 29,
+                    "code": 200,
+                    "comment": 5,
+                    "filename": "realhf\\api\\from_hf\\gpt2.py"
+                },
+                {
+                    "blank": 29,
+                    "code": 278,
+                    "comment": 9,
+                    "filename": "realhf\\api\\from_hf\\llama.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 84,
+                    "comment": 3,
+                    "filename": "realhf\\api\\from_hf\\mistral.py"
+                },
+                {
+                    "blank": 21,
+                    "code": 225,
+                    "comment": 6,
+                    "filename": "realhf\\api\\from_hf\\mixtral.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 94,
+                    "comment": 3,
+                    "filename": "realhf\\api\\from_hf\\qwen2.py"
+                },
+                {
+                    "blank": 27,
+                    "code": 215,
+                    "comment": 13,
+                    "filename": "realhf\\api\\from_hf\\qwen3.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 0,
+                    "comment": 4,
+                    "filename": "realhf\\api\\quickstart\\__init__.py"
+                },
+                {
+                    "blank": 39,
+                    "code": 206,
+                    "comment": 6,
+                    "filename": "realhf\\api\\quickstart\\device_mesh.py"
+                },
+                {
+                    "blank": 22,
+                    "code": 101,
+                    "comment": 8,
+                    "filename": "realhf\\api\\quickstart\\entrypoint.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 43,
+                    "comment": 3,
+                    "filename": "realhf\\api\\quickstart\\search.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 3,
+                    "filename": "realhf\\apps\\__init__.py"
+                },
+                {
+                    "blank": 51,
+                    "code": 355,
+                    "comment": 21,
+                    "filename": "realhf\\apps\\main.py"
+                },
+                {
+                    "blank": 37,
+                    "code": 112,
+                    "comment": 19,
+                    "filename": "realhf\\apps\\quickstart.py"
+                },
+                {
+                    "blank": 40,
+                    "code": 206,
+                    "comment": 11,
+                    "filename": "realhf\\apps\\remote.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 1,
+                    "comment": 4,
+                    "filename": "realhf\\base\\__init__.py"
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\__init__.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\datapack.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\logging.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\name_resolve.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\names.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\prologue.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\security.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "filename": "realhf\\base\\__pycache__\\timeutil.cpython-310.pyc",
+                    "isbinaryfile": true,
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0
+                },
+                {
+                    "blank": 5,
+                    "code": 17,
+                    "comment": 3,
+                    "filename": "realhf\\base\\cluster.py"
+                },
+                {
+                    "blank": 160,
+                    "code": 365,
+                    "comment": 35,
+                    "filename": "realhf\\base\\constants.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 165,
+                    "comment": 9,
+                    "filename": "realhf\\base\\datapack.py"
+                },
+                {
+                    "blank": 21,
+                    "code": 115,
+                    "comment": 12,
+                    "filename": "realhf\\base\\gpu_utils.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 26,
+                    "comment": 8,
+                    "filename": "realhf\\base\\importing.py"
+                },
+                {
+                    "blank": 20,
+                    "code": 181,
+                    "comment": 13,
+                    "filename": "realhf\\base\\logging.py"
+                },
+                {
+                    "blank": 97,
+                    "code": 622,
+                    "comment": 22,
+                    "filename": "realhf\\base\\monitor.py"
+                },
+                {
+                    "blank": 225,
+                    "code": 949,
+                    "comment": 51,
+                    "filename": "realhf\\base\\name_resolve.py"
+                },
+                {
+                    "blank": 52,
+                    "code": 54,
+                    "comment": 7,
+                    "filename": "realhf\\base\\names.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 67,
+                    "comment": 4,
+                    "filename": "realhf\\base\\network.py"
+                },
+                {
+                    "blank": 9,
+                    "code": 21,
+                    "comment": 3,
+                    "filename": "realhf\\base\\numpy_utils.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 23,
+                    "comment": 0,
+                    "filename": "realhf\\base\\pkg_version.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 47,
+                    "comment": 3,
+                    "filename": "realhf\\base\\prologue.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 13,
+                    "comment": 3,
+                    "filename": "realhf\\base\\ray_utils.py"
+                },
+                {
+                    "blank": 19,
+                    "code": 85,
+                    "comment": 7,
+                    "filename": "realhf\\base\\recover.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 64,
+                    "comment": 4,
+                    "filename": "realhf\\base\\saveload_utils.py"
+                },
+                {
+                    "blank": 2,
+                    "code": 3,
+                    "comment": 3,
+                    "filename": "realhf\\base\\security.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 41,
+                    "comment": 3,
+                    "filename": "realhf\\base\\seeding.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 52,
+                    "comment": 4,
+                    "filename": "realhf\\base\\slurm_utils.py"
+                },
+                {
+                    "blank": 40,
+                    "code": 227,
+                    "comment": 4,
+                    "filename": "realhf\\base\\stats_tracker.py"
+                },
+                {
+                    "blank": 56,
+                    "code": 334,
+                    "comment": 14,
+                    "filename": "realhf\\base\\testing.py"
+                },
+                {
+                    "blank": 52,
+                    "code": 187,
+                    "comment": 4,
+                    "filename": "realhf\\base\\timeutil.py"
+                },
+                {
+                    "blank": 135,
+                    "code": 387,
+                    "comment": 60,
+                    "filename": "realhf\\base\\topology.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 93,
+                    "comment": 2,
+                    "filename": "realhf\\experiments\\async_exp\\async_ppo_math_exp.py"
+                },
+                {
+                    "blank": 28,
+                    "code": 321,
+                    "comment": 6,
+                    "filename": "realhf\\experiments\\async_exp\\async_rl_exp.py"
+                },
+                {
+                    "blank": 41,
+                    "code": 123,
+                    "comment": 21,
+                    "filename": "realhf\\experiments\\common\\check.py"
+                },
+                {
+                    "blank": 78,
+                    "code": 514,
+                    "comment": 7,
+                    "filename": "realhf\\experiments\\common\\common.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 103,
+                    "comment": 4,
+                    "filename": "realhf\\experiments\\common\\math_code_eval_exp.py"
+                },
+                {
+                    "blank": 20,
+                    "code": 104,
+                    "comment": 1,
+                    "filename": "realhf\\experiments\\common\\null_exp.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 336,
+                    "comment": 16,
+                    "filename": "realhf\\experiments\\common\\ppo_math_exp.py"
+                },
+                {
+                    "blank": 13,
+                    "code": 62,
+                    "comment": 3,
+                    "filename": "realhf\\experiments\\common\\sft_exp.py"
+                },
+                {
+                    "blank": 42,
+                    "code": 328,
+                    "comment": 9,
+                    "filename": "realhf\\experiments\\common\\utils.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 3,
+                    "comment": 0,
+                    "filename": "realhf\\impl\\agent\\__init__.py"
+                },
+                {
+                    "blank": 40,
+                    "code": 245,
+                    "comment": 5,
+                    "filename": "realhf\\impl\\agent\\math_multi_turn_agent.py"
+                },
+                {
+                    "blank": 25,
+                    "code": 218,
+                    "comment": 5,
+                    "filename": "realhf\\impl\\agent\\math_single_step_agent.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 43,
+                    "comment": 3,
+                    "filename": "realhf\\impl\\agent\\null_agent.py"
+                },
+                {
+                    "blank": 3,
+                    "code": 6,
+                    "comment": 4,
+                    "filename": "realhf\\impl\\dataset\\__init__.py"
+                },
+                {
+                    "blank": 32,
+                    "code": 189,
+                    "comment": 10,
+                    "filename": "realhf\\impl\\dataset\\math_code_dataset.py"
+                },
+                {
+                    "blank": 107,
+                    "code": 692,
+                    "comment": 68,
+                    "filename": "realhf\\impl\\dataset\\math_parser.py"
+                },
+                {
+                    "blank": 18,
+                    "code": 84,
+                    "comment": 7,
+                    "filename": "realhf\\impl\\dataset\\prompt_answer_dataset.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 54,
+                    "comment": 4,
+                    "filename": "realhf\\impl\\dataset\\prompt_dataset.py"
+                },
+                {
+                    "blank": 26,
+                    "code": 119,
+                    "comment": 6,
+                    "filename": "realhf\\impl\\dataset\\rw_paired_dataset.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 1,
+                    "comment": 0,
+                    "filename": "realhf\\impl\\environment\\__init__.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 58,
+                    "comment": 3,
+                    "filename": "realhf\\impl\\environment\\math_code_single_step_env.py"
+                },
+                {
+                    "blank": 26,
+                    "code": 65,
+                    "comment": 11,
+                    "filename": "realhf\\impl\\model\\__init__.py"
+                },
+                {
+                    "blank": 22,
+                    "code": 198,
+                    "comment": 10,
+                    "filename": "realhf\\impl\\model\\backend\\inference.py"
+                },
+                {
+                    "blank": 86,
+                    "code": 630,
+                    "comment": 45,
+                    "filename": "realhf\\impl\\model\\backend\\megatron.py"
+                },
+                {
+                    "blank": 36,
+                    "code": 196,
+                    "comment": 5,
+                    "filename": "realhf\\impl\\model\\backend\\mock_train.py"
+                },
+                {
+                    "blank": 138,
+                    "code": 856,
+                    "comment": 62,
+                    "filename": "realhf\\impl\\model\\backend\\pipe_runner.py"
+                },
+                {
+                    "blank": 77,
+                    "code": 410,
+                    "comment": 23,
+                    "filename": "realhf\\impl\\model\\backend\\sglang.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 0,
+                    "comment": 0,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\megatron\\__init__.py"
+                },
+                {
+                    "blank": 45,
+                    "code": 191,
+                    "comment": 7,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\megatron\\v0_6_0\\lr_schduler.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 4,
+                    "comment": 1,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\vllm\\__init__.py"
+                },
+                {
+                    "blank": 33,
+                    "code": 96,
+                    "comment": 13,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\vllm\\context.py"
+                },
+                {
+                    "blank": 13,
+                    "code": 45,
+                    "comment": 1,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\vllm\\custom_cache_manager.py"
+                },
+                {
+                    "blank": 38,
+                    "code": 112,
+                    "comment": 47,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\vllm\\engine.py"
+                },
+                {
+                    "blank": 40,
+                    "code": 175,
+                    "comment": 44,
+                    "filename": "realhf\\impl\\model\\backend\\thirdparty\\vllm\\executor.py"
+                },
+                {
+                    "blank": 35,
+                    "code": 186,
+                    "comment": 26,
+                    "filename": "realhf\\impl\\model\\backend\\vllm.py"
+                },
+                {
+                    "blank": 21,
+                    "code": 136,
+                    "comment": 7,
+                    "filename": "realhf\\impl\\model\\comm\\global_comm.py"
+                },
+                {
+                    "blank": 50,
+                    "code": 488,
+                    "comment": 23,
+                    "filename": "realhf\\impl\\model\\comm\\param_realloc.py"
+                },
+                {
+                    "blank": 47,
+                    "code": 317,
+                    "comment": 18,
+                    "filename": "realhf\\impl\\model\\conversion\\hf_registry.py"
+                },
+                {
+                    "blank": 13,
+                    "code": 55,
+                    "comment": 3,
+                    "filename": "realhf\\impl\\model\\interface\\fused_interface.py"
+                },
+                {
+                    "blank": 73,
+                    "code": 432,
+                    "comment": 13,
+                    "filename": "realhf\\impl\\model\\interface\\math_rw_interface.py"
+                },
+                {
+                    "blank": 146,
+                    "code": 1142,
+                    "comment": 59,
+                    "filename": "realhf\\impl\\model\\interface\\ppo_interface.py"
+                },
+                {
+                    "blank": 25,
+                    "code": 117,
+                    "comment": 4,
+                    "filename": "realhf\\impl\\model\\interface\\sft_interface.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 7,
+                    "comment": 3,
+                    "filename": "realhf\\impl\\model\\modules\\__init__.py"
+                },
+                {
+                    "blank": 40,
+                    "code": 91,
+                    "comment": 21,
+                    "filename": "realhf\\impl\\model\\modules\\activations.py"
+                },
+                {
+                    "blank": 28,
+                    "code": 257,
+                    "comment": 24,
+                    "filename": "realhf\\impl\\model\\modules\\attn.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 45,
+                    "comment": 6,
+                    "filename": "realhf\\impl\\model\\modules\\embedding.py"
+                },
+                {
+                    "blank": 46,
+                    "code": 366,
+                    "comment": 19,
+                    "filename": "realhf\\impl\\model\\modules\\mlp.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 4,
+                    "comment": 3,
+                    "filename": "realhf\\impl\\model\\modules\\moe\\__init__.py"
+                },
+                {
+                    "blank": 33,
+                    "code": 173,
+                    "comment": 12,
+                    "filename": "realhf\\impl\\model\\modules\\moe\\experts.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 53,
+                    "comment": 2,
+                    "filename": "realhf\\impl\\model\\modules\\moe\\layer.py"
+                },
+                {
+                    "blank": 35,
+                    "code": 153,
+                    "comment": 11,
+                    "filename": "realhf\\impl\\model\\modules\\moe\\router.py"
+                },
+                {
+                    "blank": 29,
+                    "code": 84,
+                    "comment": 11,
+                    "filename": "realhf\\impl\\model\\modules\\moe\\token_dispatcher.py"
+                },
+                {
+                    "blank": 44,
+                    "code": 208,
+                    "comment": 10,
+                    "filename": "realhf\\impl\\model\\modules\\rms.py"
+                },
+                {
+                    "blank": 23,
+                    "code": 183,
+                    "comment": 29,
+                    "filename": "realhf\\impl\\model\\modules\\rotary.py"
+                },
+                {
+                    "blank": 55,
+                    "code": 331,
+                    "comment": 16,
+                    "filename": "realhf\\impl\\model\\nn\\flatten_param.py"
+                },
+                {
+                    "blank": 96,
+                    "code": 784,
+                    "comment": 40,
+                    "filename": "realhf\\impl\\model\\nn\\real_llm_api.py"
+                },
+                {
+                    "blank": 61,
+                    "code": 457,
+                    "comment": 21,
+                    "filename": "realhf\\impl\\model\\nn\\real_llm_base.py"
+                },
+                {
+                    "blank": 119,
+                    "code": 701,
+                    "comment": 47,
+                    "filename": "realhf\\impl\\model\\nn\\real_llm_generate.py"
+                },
+                {
+                    "blank": 53,
+                    "code": 335,
+                    "comment": 17,
+                    "filename": "realhf\\impl\\model\\nn\\real_llm_parallel.py"
+                },
+                {
+                    "blank": 53,
+                    "code": 84,
+                    "comment": 9,
+                    "filename": "realhf\\impl\\model\\parallelism\\pipeline_parallel\\instruction.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 29,
+                    "comment": 14,
+                    "filename": "realhf\\impl\\model\\parallelism\\pipeline_parallel\\p2p.py"
+                },
+                {
+                    "blank": 84,
+                    "code": 276,
+                    "comment": 20,
+                    "filename": "realhf\\impl\\model\\parallelism\\pipeline_parallel\\static_schedule.py"
+                },
+                {
+                    "blank": 20,
+                    "code": 74,
+                    "comment": 12,
+                    "filename": "realhf\\impl\\model\\parallelism\\pipeline_parallel\\tensor_storage.py"
+                },
+                {
+                    "blank": 102,
+                    "code": 161,
+                    "comment": 23,
+                    "filename": "realhf\\impl\\model\\parallelism\\tensor_parallel\\mappings.py"
+                },
+                {
+                    "blank": 158,
+                    "code": 748,
+                    "comment": 100,
+                    "filename": "realhf\\impl\\model\\parallelism\\tensor_parallel\\modules.py"
+                },
+                {
+                    "blank": 46,
+                    "code": 111,
+                    "comment": 12,
+                    "filename": "realhf\\impl\\model\\parallelism\\tensor_parallel\\utils.py"
+                },
+                {
+                    "blank": 38,
+                    "code": 153,
+                    "comment": 11,
+                    "filename": "realhf\\impl\\model\\utils\\cuda_graph.py"
+                },
+                {
+                    "blank": 4,
+                    "code": 27,
+                    "comment": 3,
+                    "filename": "realhf\\impl\\model\\utils\\dpo_functional.py"
+                },
+                {
+                    "blank": 59,
+                    "code": 343,
+                    "comment": 26,
+                    "filename": "realhf\\impl\\model\\utils\\functional.py"
+                },
+                {
+                    "blank": 37,
+                    "code": 174,
+                    "comment": 11,
+                    "filename": "realhf\\impl\\model\\utils\\logits_warper.py"
+                },
+                {
+                    "blank": 69,
+                    "code": 207,
+                    "comment": 21,
+                    "filename": "realhf\\impl\\model\\utils\\moe.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 167,
+                    "comment": 27,
+                    "filename": "realhf\\impl\\model\\utils\\padding.py"
+                },
+                {
+                    "blank": 62,
+                    "code": 263,
+                    "comment": 12,
+                    "filename": "realhf\\impl\\model\\utils\\ppo_functional.py"
+                },
+                {
+                    "blank": 71,
+                    "code": 192,
+                    "comment": 36,
+                    "filename": "realhf\\impl\\model\\utils\\random.py"
+                },
+                {
+                    "blank": 38,
+                    "code": 98,
+                    "comment": 10,
+                    "filename": "realhf\\scheduler\\client.py"
+                },
+                {
+                    "blank": 33,
+                    "code": 291,
+                    "comment": 24,
+                    "filename": "realhf\\scheduler\\evaluator.py"
+                },
+                {
+                    "blank": 32,
+                    "code": 248,
+                    "comment": 7,
+                    "filename": "realhf\\scheduler\\local\\client.py"
+                },
+                {
+                    "blank": 43,
+                    "code": 330,
+                    "comment": 23,
+                    "filename": "realhf\\scheduler\\slurm\\client.py"
+                },
+                {
+                    "blank": 87,
+                    "code": 639,
+                    "comment": 34,
+                    "filename": "realhf\\scheduler\\slurm\\utils.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 59,
+                    "comment": 5,
+                    "filename": "realhf\\system\\__init__.py"
+                },
+                {
+                    "blank": 88,
+                    "code": 293,
+                    "comment": 26,
+                    "filename": "realhf\\system\\buffer.py"
+                },
+                {
+                    "blank": 81,
+                    "code": 563,
+                    "comment": 33,
+                    "filename": "realhf\\system\\controller.py"
+                },
+                {
+                    "blank": 57,
+                    "code": 376,
+                    "comment": 22,
+                    "filename": "realhf\\system\\data_manager.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 101,
+                    "comment": 5,
+                    "filename": "realhf\\system\\flops_counter.py"
+                },
+                {
+                    "blank": 35,
+                    "code": 179,
+                    "comment": 10,
+                    "filename": "realhf\\system\\function_executor.py"
+                },
+                {
+                    "blank": 42,
+                    "code": 140,
+                    "comment": 6,
+                    "filename": "realhf\\system\\generation_server.py"
+                },
+                {
+                    "blank": 63,
+                    "code": 388,
+                    "comment": 21,
+                    "filename": "realhf\\system\\gserver_manager.py"
+                },
+                {
+                    "blank": 68,
+                    "code": 491,
+                    "comment": 47,
+                    "filename": "realhf\\system\\master_worker.py"
+                },
+                {
+                    "blank": 57,
+                    "code": 420,
+                    "comment": 32,
+                    "filename": "realhf\\system\\model_function_call.py"
+                },
+                {
+                    "blank": 161,
+                    "code": 1297,
+                    "comment": 160,
+                    "filename": "realhf\\system\\model_worker.py"
+                },
+                {
+                    "blank": 34,
+                    "code": 230,
+                    "comment": 12,
+                    "filename": "realhf\\system\\partial_rollout.py"
+                },
+                {
+                    "blank": 33,
+                    "code": 105,
+                    "comment": 4,
+                    "filename": "realhf\\system\\push_pull_stream.py"
+                },
+                {
+                    "blank": 42,
+                    "code": 303,
+                    "comment": 15,
+                    "filename": "realhf\\system\\redistributor.py"
+                },
+                {
+                    "blank": 70,
+                    "code": 338,
+                    "comment": 15,
+                    "filename": "realhf\\system\\request_reply_stream.py"
+                },
+                {
+                    "blank": 49,
+                    "code": 302,
+                    "comment": 23,
+                    "filename": "realhf\\system\\rollout_worker.py"
+                },
+                {
+                    "blank": 15,
+                    "code": 87,
+                    "comment": 4,
+                    "filename": "realhf\\system\\stream_dataset.py"
+                },
+                {
+                    "blank": 129,
+                    "code": 551,
+                    "comment": 15,
+                    "filename": "realhf\\system\\worker_base.py"
+                },
+                {
+                    "blank": 33,
+                    "code": 138,
+                    "comment": 6,
+                    "filename": "realhf\\system\\worker_control.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 0,
+                    "comment": 4,
+                    "filename": "realhf\\tests\\__init__.py"
+                },
+                {
+                    "blank": 38,
+                    "code": 136,
+                    "comment": 8,
+                    "filename": "realhf\\tests\\agent\\test_math_single_step_agent.py"
+                },
+                {
+                    "blank": 36,
+                    "code": 231,
+                    "comment": 10,
+                    "filename": "realhf\\tests\\comm\\test_data_transfer.py"
+                },
+                {
+                    "blank": 67,
+                    "code": 458,
+                    "comment": 40,
+                    "filename": "realhf\\tests\\comm\\test_param_realloc.py"
+                },
+                {
+                    "blank": 10,
+                    "code": 43,
+                    "comment": 3,
+                    "filename": "realhf\\tests\\cpp_extensions\\test_cugae.py"
+                },
+                {
+                    "blank": 25,
+                    "code": 110,
+                    "comment": 10,
+                    "filename": "realhf\\tests\\cpp_extensions\\test_grouped_gemm.py"
+                },
+                {
+                    "blank": 20,
+                    "code": 114,
+                    "comment": 7,
+                    "filename": "realhf\\tests\\cpp_extensions\\test_interval_ops.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 134,
+                    "comment": 5,
+                    "filename": "realhf\\tests\\data\\test_dfg.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 33,
+                    "comment": 8,
+                    "filename": "realhf\\tests\\data\\test_dual_clip.py"
+                },
+                {
+                    "blank": 7,
+                    "code": 42,
+                    "comment": 0,
+                    "filename": "realhf\\tests\\data\\test_epoch_counter.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 78,
+                    "comment": 8,
+                    "filename": "realhf\\tests\\data\\test_load_data.py"
+                },
+                {
+                    "blank": 31,
+                    "code": 257,
+                    "comment": 7,
+                    "filename": "realhf\\tests\\data\\test_sequence_gather_split.py"
+                },
+                {
+                    "blank": 63,
+                    "code": 151,
+                    "comment": 34,
+                    "filename": "realhf\\tests\\data\\test_stats_tracker.py"
+                },
+                {
+                    "blank": 14,
+                    "code": 39,
+                    "comment": 2,
+                    "filename": "realhf\\tests\\distributed\\test_find_port.py"
+                },
+                {
+                    "blank": 198,
+                    "code": 391,
+                    "comment": 99,
+                    "filename": "realhf\\tests\\distributed\\test_name_resolve.py"
+                },
+                {
+                    "blank": 13,
+                    "code": 121,
+                    "comment": 6,
+                    "filename": "realhf\\tests\\experiments\\test_buffer_recover.py"
+                },
+                {
+                    "blank": 30,
+                    "code": 603,
+                    "comment": 12,
+                    "filename": "realhf\\tests\\experiments\\test_math_ppo.py"
+                },
+                {
+                    "blank": 12,
+                    "code": 77,
+                    "comment": 2,
+                    "filename": "realhf\\tests\\experiments\\test_sft.py"
+                },
+                {
+                    "blank": 17,
+                    "code": 90,
+                    "comment": 11,
+                    "filename": "realhf\\tests\\experiments\\utils.py"
+                },
+                {
+                    "blank": 30,
+                    "code": 113,
+                    "comment": 10,
+                    "filename": "realhf\\tests\\fixtures.py"
+                },
+                {
+                    "blank": 11,
+                    "code": 103,
+                    "comment": 3,
+                    "filename": "realhf\\tests\\interfaces\\test_multi_task_reward.py"
+                },
+                {
+                    "blank": 25,
+                    "code": 207,
+                    "comment": 12,
+                    "filename": "realhf\\tests\\legacy\\test_sglang_tp.py"
+                },
+                {
+                    "blank": 24,
+                    "code": 203,
+                    "comment": 17,
+                    "filename": "realhf\\tests\\legacy\\test_vllm_tp.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 64,
+                    "comment": 8,
+                    "filename": "realhf\\tests\\model\\test_cpu_inference.py"
+                },
+                {
+                    "blank": 18,
+                    "code": 151,
+                    "comment": 13,
+                    "filename": "realhf\\tests\\model\\test_distributed_load_hf.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 10,
+                    "comment": 0,
+                    "filename": "realhf\\tests\\reward\\math_answers_sample_cases.jsonl"
+                },
+                {
+                    "blank": 4,
+                    "code": 22,
+                    "comment": 1,
+                    "filename": "realhf\\tests\\reward\\test_math_reward.py"
+                },
+                {
+                    "blank": 57,
+                    "code": 252,
+                    "comment": 24,
+                    "filename": "realhf\\tests\\system\\test_gserver_manager.py"
+                },
+                {
+                    "blank": 24,
+                    "code": 115,
+                    "comment": 6,
+                    "filename": "realhf\\tests\\system\\test_partial_rollout.py"
+                },
+                {
+                    "blank": 75,
+                    "code": 134,
+                    "comment": 23,
+                    "filename": "realhf\\tests\\system\\test_push_pull_stream.py"
+                },
+                {
+                    "blank": 36,
+                    "code": 130,
+                    "comment": 12,
+                    "filename": "realhf\\tests\\system\\test_stream_dataset.py"
+                },
+                {
+                    "blank": 9,
+                    "code": 195,
+                    "comment": 0,
+                    "filename": "realhf\\training\\configs\\async-ppo.yaml"
+                },
+                {
+                    "blank": 6,
+                    "code": 98,
+                    "comment": 0,
+                    "filename": "realhf\\training\\configs\\sft.yaml"
+                },
+                {
+                    "blank": 7,
+                    "code": 183,
+                    "comment": 0,
+                    "filename": "realhf\\training\\configs\\sync-ppo.yaml"
+                },
+                {
+                    "blank": 17,
+                    "code": 49,
+                    "comment": 4,
+                    "filename": "realhf\\training\\main_async_ppo.py"
+                },
+                {
+                    "blank": 16,
+                    "code": 49,
+                    "comment": 4,
+                    "filename": "realhf\\training\\main_sft.py"
+                },
+                {
+                    "blank": 21,
+                    "code": 52,
+                    "comment": 4,
+                    "filename": "realhf\\training\\main_sync_ppo.py"
+                },
+                {
+                    "blank": 49,
+                    "code": 267,
+                    "comment": 30,
+                    "filename": "realhf\\training\\utils.py"
+                },
+                {
+                    "blank": 6,
+                    "code": 26,
+                    "comment": 0,
+                    "filename": "realhf\\utils.py"
+                },
+                {
+                    "blank": 6,
+                    "code": 50,
+                    "comment": 0,
+                    "filename": "realhf\\version.py"
+                },
+                {
+                    "blank": 0,
+                    "code": 79,
+                    "comment": 0,
+                    "filename": "requirements.txt"
+                },
+                {
+                    "blank": 2,
+                    "code": 6,
+                    "comment": 3,
+                    "filename": "setup.py"
+                },
+                {
+                    "blank": 1,
+                    "code": 13,
+                    "comment": 0,
+                    "filename": "test_output.txt"
+                }
+            ]
+        }
+    ]
+}

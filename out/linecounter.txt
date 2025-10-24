@@ -1,0 +1,605 @@
+===============================================================================
+EXTENSION NAME : linecounter
+EXTENSION VERSION : 0.2.7
+-------------------------------------------------------------------------------
+count time : 2025-10-09 17:26:36
+count workspace : d:\workspace\ai\oss\AReaL
+total files : 566
+total code lines : 118504
+total comment lines : 5350
+total blank lines : 15724
+
+    statistics
+   |      extension|     total code|  total comment|    total blank|percent|
+   -------------------------------------------------------------------------
+   |           .txt|           1462|              5|             54|    1.2|
+   |               |           1333|             83|            239|    1.1|
+   |            .py|         102245|           4959|          13403|     86|
+   |            .md|           2848|             97|            907|    2.4|
+   |          .toml|            138|              0|             19|   0.12|
+   |           .ini|              4|              0|              0| 0.0034|
+   |            .in|             11|              0|              0| 0.0093|
+   |           .yml|            290|              5|             53|   0.24|
+   |          .yaml|           2004|              8|             90|    1.7|
+   |         .ipynb|           2628|              0|            138|    2.2|
+   |          .json|             19|              0|              0|  0.016|
+   |          .html|           1259|              0|              0|    1.1|
+   |            .sh|            411|             61|             65|   0.35|
+   |            .js|            550|             99|             96|   0.46|
+   |            .g4|            536|             23|             94|   0.45|
+   |           .cfg|              3|              0|              0| 0.0025|
+   |            .cu|            288|              4|             39|   0.24|
+   |           .cpp|             21|              2|              6|  0.018|
+   |         .jsonl|            809|              0|              0|   0.68|
+   |           .css|            188|              3|            186|   0.16|
+   |        .tokens|            714|              0|              0|   0.60|
+   |        .interp|            739|              0|            335|   0.62|
+   |           .TAG|              4|              1|              0| 0.0034|
+   -------------------------------------------------------------------------
+.clang-format, code is 95, comment is 0, blank is 0.
+.coverage, it is a binary file.
+.dockerignore, code is 88, comment is 0, blank is 17.
+.github\ISSUE_TEMPLATE\bug.md, code is 23, comment is 0, blank is 15.
+.github\ISSUE_TEMPLATE\doc.md, code is 22, comment is 0, blank is 9.
+.github\ISSUE_TEMPLATE\feature.md, code is 19, comment is 0, blank is 10.
+.github\ISSUE_TEMPLATE\refactor.md, code is 16, comment is 0, blank is 5.
+.github\workflows\deploy-docs.yml, code is 57, comment is 0, blank is 11.
+.github\workflows\format-check.yml, code is 23, comment is 0, blank is 8.
+.github\workflows\installation-validation.yml, code is 102, comment is 0, blank is 19.
+.github\workflows\test-areal.yml, code is 36, comment is 0, blank is 8.
+.gitignore, code is 91, comment is 0, blank is 17.
+.pre-commit-config.yaml, code is 81, comment is 8, blank is 8.
+.pytest_cache\.gitignore, code is 2, comment is 0, blank is 0.
+.pytest_cache\CACHEDIR.TAG, code is 4, comment is 1, blank is 0.
+.pytest_cache\README.md, code is 2, comment is 0, blank is 1.
+.pytest_cache\v\cache\lastfailed, code is 18, comment is 0, blank is 0.
+.pytest_cache\v\cache\nodeids, code is 215, comment is 0, blank is 1.
+areal\api\__pycache__\cli_args.cpython-310.pyc, it is a binary file.
+areal\api\__pycache__\engine_api.cpython-310.pyc, it is a binary file.
+areal\api\__pycache__\io_struct.cpython-310.pyc, it is a binary file.
+areal\api\__pycache__\workflow_api.cpython-310.pyc, it is a binary file.
+areal\api\cli_args.py, code is 707, comment is 28, blank is 102.
+areal\api\engine_api.py, code is 129, comment is 4, blank is 65.
+areal\api\env_api.py, code is 9, comment is 0, blank is 10.
+areal\api\io_struct.py, code is 255, comment is 23, blank is 52.
+areal\api\reward_api.py, code is 42, comment is 0, blank is 12.
+areal\api\workflow_api.py, code is 733, comment is 48, blank is 131.
+areal\dataset\__init__.py, code is 47, comment is 0, blank is 11.
+areal\dataset\clevr_count_70k.py, code is 99, comment is 1, blank is 19.
+areal\dataset\geometry3k.py, code is 114, comment is 2, blank is 20.
+areal\dataset\gsm8k.py, code is 22, comment is 0, blank is 8.
+areal\engine\__init__.py, code is 0, comment is 0, blank is 0.
+areal\engine\__pycache__\__init__.cpython-310.pyc, it is a binary file.
+areal\engine\__pycache__\sglang_remote.cpython-310.pyc, it is a binary file.
+areal\engine\base_hf_engine.py, code is 380, comment is 27, blank is 60.
+areal\engine\fsdp_engine.py, code is 236, comment is 19, blank is 40.
+areal\engine\ppo\__pycache__\actor.cpython-310.pyc, it is a binary file.
+areal\engine\ppo\actor.py, code is 322, comment is 21, blank is 41.
+areal\engine\sft\lm_engine.py, code is 67, comment is 1, blank is 15.
+areal\engine\sglang_remote.py, code is 389, comment is 58, blank is 82.
+areal\experimental\autotp_engine.py, code is 105, comment is 4, blank is 19.
+areal\experimental\sglang_engine.py, code is 301, comment is 10, blank is 62.
+areal\experimental\tests\test_sglang_local_engine.py, code is 110, comment is 11, blank is 24.
+areal\launcher\local.py, code is 320, comment is 8, blank is 36.
+areal\launcher\ray.py, code is 368, comment is 30, blank is 49.
+areal\launcher\sglang_server.py, code is 153, comment is 4, blank is 28.
+areal\launcher\slurm.py, code is 433, comment is 19, blank is 65.
+areal\README.md, code is 154, comment is 1, blank is 43.
+areal\reward\__init__.py, code is 13, comment is 0, blank is 4.
+areal\reward\clevr_count_70k.py, code is 19, comment is 1, blank is 8.
+areal\reward\geometry3k.py, code is 21, comment is 3, blank is 6.
+areal\tests\grpo\config.yaml, code is 54, comment is 0, blank is 3.
+areal\tests\grpo\entrypoint.py, code is 117, comment is 0, blank is 31.
+areal\tests\grpo\test_grpo.py, code is 23, comment is 1, blank is 7.
+areal\tests\seg_decoupled_ppo\__pycache__\test_behav_imp_weight_floor.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_behav_imp_weight_floor.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_grpo_loss_logp_alignment.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_grpo_loss_logp_alignment.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_ppo_functional_coverage.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_proximal_t_generation_simple.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_proximal_t_generation_simple.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_recompute_timing.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_recompute_timing.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_workflow_executor_wait.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_workflow_executor_wait.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_workflow_helper_functions.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_workflow_helper_functions.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_workflow_wait_bugfixes.cpython-310-pytest-8.4.0.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\__pycache__\test_workflow_wait_bugfixes.cpython-310-pytest-8.4.2.pyc, it is a binary file.
+areal\tests\seg_decoupled_ppo\test_behav_imp_weight_floor.py, code is 199, comment is 49, blank is 68.
+areal\tests\seg_decoupled_ppo\test_grpo_loss_logp_alignment.py, code is 34, comment is 25, blank is 37.
+areal\tests\seg_decoupled_ppo\test_ppo_functional_coverage.py, code is 218, comment is 42, blank is 86.
+areal\tests\seg_decoupled_ppo\test_proximal_t_generation_simple.py, code is 95, comment is 50, blank is 43.
+areal\tests\seg_decoupled_ppo\test_recompute_timing.py, code is 216, comment is 71, blank is 112.
+areal\tests\seg_decoupled_ppo\test_workflow_executor_wait.py, code is 313, comment is 70, blank is 174.
+areal\tests\seg_decoupled_ppo\test_workflow_helper_functions.py, code is 338, comment is 55, blank is 170.
+areal\tests\seg_decoupled_ppo\test_workflow_wait_bugfixes.py, code is 174, comment is 66, blank is 121.
+areal\tests\sft\config.yaml, code is 36, comment is 0, blank is 1.
+areal\tests\sft\entrypoint.py, code is 71, comment is 0, blank is 19.
+areal\tests\sft\ref_losses.json, code is 18, comment is 0, blank is 0.
+areal\tests\sft\test_sft.py, code is 29, comment is 2, blank is 8.
+areal\tests\test_fsdp_engine_nccl.py, code is 103, comment is 6, blank is 15.
+areal\tests\test_sglang_engine.py, code is 173, comment is 11, blank is 32.
+areal\tests\test_train_engine.py, code is 125, comment is 2, blank is 34.
+areal\tests\test_utils.py, code is 55, comment is 4, blank is 11.
+areal\tests\test_wrapper.py, code is 36, comment is 0, blank is 12.
+areal\utils\__init__.py, code is 0, comment is 0, blank is 0.
+areal\utils\__pycache__\__init__.cpython-310.pyc, it is a binary file.
+areal\utils\__pycache__\data.cpython-310.pyc, it is a binary file.
+areal\utils\__pycache__\fs.cpython-310.pyc, it is a binary file.
+areal\utils\__pycache__\functional.cpython-310.pyc, it is a binary file.
+areal\utils\__pycache__\http.cpython-310.pyc, it is a binary file.
+areal\utils\__pycache__\network.cpython-310.pyc, it is a binary file.
+areal\utils\data.py, code is 411, comment is 29, blank is 80.
+areal\utils\device.py, code is 22, comment is 1, blank is 8.
+areal\utils\distributed.py, code is 53, comment is 9, blank is 11.
+areal\utils\evaluator.py, code is 29, comment is 0, blank is 7.
+areal\utils\fs.py, code is 7, comment is 0, blank is 2.
+areal\utils\fsdp.py, code is 130, comment is 3, blank is 31.
+areal\utils\functional.py, code is 155, comment is 39, blank is 29.
+areal\utils\http.py, code is 78, comment is 0, blank is 12.
+areal\utils\image.py, code is 28, comment is 0, blank is 15.
+areal\utils\launcher.py, code is 90, comment is 2, blank is 11.
+areal\utils\model.py, code is 11, comment is 5, blank is 5.
+areal\utils\network.py, code is 52, comment is 6, blank is 22.
+areal\utils\ray.py, code is 19, comment is 1, blank is 4.
+areal\utils\recover.py, code is 306, comment is 13, blank is 42.
+areal\utils\save_load.py, code is 66, comment is 4, blank is 17.
+areal\utils\saver.py, code is 108, comment is 0, blank is 12.
+areal\utils\slurm.py, code is 107, comment is 0, blank is 16.
+areal\utils\stats_logger.py, code is 85, comment is 2, blank is 15.
+areal\utils\wrapper.py, code is 35, comment is 0, blank is 12.
+areal\workflow\multi_turn.py, code is 141, comment is 13, blank is 12.
+areal\workflow\rlvr.py, code is 108, comment is 4, blank is 16.
+areal\workflow\vision_rlvr.py, code is 108, comment is 4, blank is 18.
+assets\1.5b_time_n1n4n16.png, it is a binary file.
+assets\7b_zero_eval_acc.png, it is a binary file.
+assets\7b_zero_training_curve.png, it is a binary file.
+assets\algo_ablation.png, it is a binary file.
+assets\arch.png, it is a binary file.
+assets\areal_lite_layers.png, it is a binary file.
+assets\async_scaling_vs_verl.png, it is a binary file.
+assets\async_timeline.png, it is a binary file.
+assets\decoupled_ppo_obj.png, it is a binary file.
+assets\distill_1.5b_24k_curve.png, it is a binary file.
+assets\gen_scaling_trend.png, it is a binary file.
+assets\gsm8k_2.5-1.5b-ins_training_curve.png, it is a binary file.
+assets\interrupt_gen_ablation.png, it is a binary file.
+assets\logo.png, it is a binary file.
+assets\logo_lite.png, it is a binary file.
+assets\staleness_throughput.png, it is a binary file.
+assets\sync_one_step_gen.png, it is a binary file.
+assets\thpt_comparison.png, it is a binary file.
+assets\wechat_qrcode.png, it is a binary file.
+benchmark\verl_v0_3_0_post1_76084d3\areal_config.yaml, code is 41, comment is 0, blank is 0.
+benchmark\verl_v0_3_0_post1_76084d3\build_cmd.py, code is 87, comment is 5, blank is 27.
+benchmark\verl_v0_3_0_post1_76084d3\README.md, code is 28, comment is 2, blank is 16.
+benchmark\verl_v0_3_0_post1_76084d3\scaling_trend_vs_verl.png, it is a binary file.
+blog\AReaL_v0_1.md, code is 30, comment is 7, blank is 14.
+blog\AReaL_v0_2.md, code is 77, comment is 10, blank is 45.
+blog\AReaL_v0_3.md, code is 192, comment is 10, blank is 65.
+CHANGES_SUMMARY.md, code is 74, comment is 0, blank is 25.
+compare_vllm_sglang.ipynb, code is 1776, comment is 0, blank is 96.
+csrc\cugae\gae.cu, code is 201, comment is 2, blank is 14.
+csrc\interval_op\interval_op.cpp, code is 21, comment is 2, blank is 6.
+csrc\interval_op\interval_op.cu, code is 87, comment is 2, blank is 25.
+Dockerfile, code is 69, comment is 10, blank is 11.
+docs\_config.yml, code is 27, comment is 4, blank is 6.
+docs\_toc.yml, code is 45, comment is 1, blank is 1.
+docs\contrib.md, code is 22, comment is 1, blank is 10.
+docs\customization\agent.md, code is 39, comment is 0, blank is 12.
+docs\customization\algorithm.md, code is 87, comment is 0, blank is 26.
+docs\customization\dataset.md, code is 103, comment is 0, blank is 18.
+docs\developer\areal_code_arch.png, it is a binary file.
+docs\developer\overview.md, code is 9, comment is 0, blank is 6.
+docs\developer\rollout.md, code is 3, comment is 0, blank is 2.
+docs\developer\rollout\areal_rollout_manager.png, it is a binary file.
+docs\developer\rollout\gserver.md, code is 4, comment is 0, blank is 3.
+docs\developer\rollout\rollout_worker.md, code is 8, comment is 0, blank is 7.
+docs\developer\rollout\rollout_worker.png, it is a binary file.
+docs\developer\trainer.md, code is 5, comment is 0, blank is 4.
+docs\developer\trainer\algo_interface.md, code is 72, comment is 0, blank is 26.
+docs\developer\trainer\algo_interface.png, it is a binary file.
+docs\developer\trainer\allocation_parallel.md, code is 12, comment is 0, blank is 5.
+docs\developer\trainer\buffer_arch.png, it is a binary file.
+docs\developer\trainer\master-model-interaction.png, it is a binary file.
+docs\developer\trainer\master_arch.png, it is a binary file.
+docs\developer\trainer\master_worker.md, code is 18, comment is 0, blank is 10.
+docs\developer\trainer\model_worker.md, code is 31, comment is 0, blank is 17.
+docs\developer\trainer\param_shard.png, it is a binary file.
+docs\figures\logo.png, it is a binary file.
+docs\intro.md, code is 2, comment is 0, blank is 1.
+docs\legacy\customization\agent.md, code is 28, comment is 0, blank is 8.
+docs\legacy\customization\algorithm.md, code is 99, comment is 0, blank is 29.
+docs\legacy\customization\dataset.md, code is 8, comment is 0, blank is 3.
+docs\legacy\customization\decoupled_loss.png, it is a binary file.
+docs\legacy\customization\multiturn_reward.png, it is a binary file.
+docs\lite\gsm8k_grpo.md, code is 503, comment is 12, blank is 88.
+docs\lite\gsm8k_grpo.png, it is a binary file.
+docs\PROXIMAL_T_BUGS_COMPLETE_ANALYSIS.md, code is 447, comment is 0, blank is 131.
+docs\references\benchmark.md, code is 2, comment is 1, blank is 1.
+docs\references\reproduce.md, code is 32, comment is 7, blank is 10.
+docs\requirements.txt, code is 3, comment is 0, blank is 0.
+docs\tutorial\eval.md, code is 4, comment is 0, blank is 2.
+docs\tutorial\installation.md, code is 77, comment is 6, blank is 28.
+docs\tutorial\quickstart.md, code is 6, comment is 0, blank is 1.
+docs\tutorial\quickstart_legacy.md, code is 99, comment is 2, blank is 26.
+docs\tutorial\troubleshooting.md, code is 39, comment is 0, blank is 18.
+evaluation\aggregate_acc_from_generated.py, code is 35, comment is 2, blank is 11.
+evaluation\cf_elo_caculator.py, code is 261, comment is 10, blank is 73.
+evaluation\code_eval.py, code is 363, comment is 62, blank is 70.
+evaluation\code_verifier\local_verify.py, code is 163, comment is 1, blank is 39.
+evaluation\code_verifier\testing_util.py, code is 601, comment is 62, blank is 121.
+evaluation\data\aime24\test.jsonl, code is 30, comment is 0, blank is 0.
+evaluation\data\aime25\test.jsonl, code is 30, comment is 0, blank is 0.
+evaluation\data\amc23\test.jsonl, code is 40, comment is 0, blank is 0.
+evaluation\data\gpqa_diamond\test.jsonl, code is 198, comment is 0, blank is 0.
+evaluation\data\math_500\test.jsonl, code is 500, comment is 0, blank is 0.
+evaluation\data_loader.py, code is 75, comment is 6, blank is 6.
+evaluation\eval.sh, code is 31, comment is 12, blank is 8.
+evaluation\eval_and_aggregate.py, code is 299, comment is 5, blank is 52.
+evaluation\eval_and_aggregate_debug.py, code is 305, comment is 13, blank is 62.
+evaluation\evaluate.py, code is 109, comment is 4, blank is 18.
+evaluation\examples.py, code is 370, comment is 1, blank is 7.
+evaluation\grader.py, code is 280, comment is 49, blank is 62.
+evaluation\latex2sympy\.coveragerc, code is 7, comment is 25, blank is 0.
+evaluation\latex2sympy\.gitignore, code is 108, comment is 0, blank is 24.
+evaluation\latex2sympy\__init__.py, code is 1, comment is 0, blank is 0.
+evaluation\latex2sympy\antlr-4.11.1-complete.jar, it is a binary file.
+evaluation\latex2sympy\asciimath_printer.py, code is 52, comment is 0, blank is 14.
+evaluation\latex2sympy\description.txt, code is 103, comment is 5, blank is 43.
+evaluation\latex2sympy\dev-requirements.in, code is 8, comment is 0, blank is 0.
+evaluation\latex2sympy\dev-requirements.txt, code is 59, comment is 0, blank is 1.
+evaluation\latex2sympy\gen\__init__.py, code is 0, comment is 0, blank is 0.
+evaluation\latex2sympy\gen\PS.interp, code is 295, comment is 0, blank is 167.
+evaluation\latex2sympy\gen\PS.tokens, code is 357, comment is 0, blank is 0.
+evaluation\latex2sympy\gen\PSLexer.interp, code is 444, comment is 0, blank is 168.
+evaluation\latex2sympy\gen\PSLexer.py, code is 24550, comment is 2, blank is 16.
+evaluation\latex2sympy\gen\PSLexer.tokens, code is 357, comment is 0, blank is 0.
+evaluation\latex2sympy\gen\PSListener.py, code is 254, comment is 128, blank is 191.
+evaluation\latex2sympy\gen\PSParser.py, code is 15450, comment is 33, blank is 1060.
+evaluation\latex2sympy\latex2sympy2.egg-info\dependency_links.txt, code is 0, comment is 0, blank is 1.
+evaluation\latex2sympy\latex2sympy2.egg-info\PKG-INFO, code is 172, comment is 8, blank is 58.
+evaluation\latex2sympy\latex2sympy2.egg-info\requires.txt, code is 2, comment is 0, blank is 0.
+evaluation\latex2sympy\latex2sympy2.egg-info\SOURCES.txt, code is 39, comment is 0, blank is 0.
+evaluation\latex2sympy\latex2sympy2.egg-info\top_level.txt, code is 4, comment is 0, blank is 0.
+evaluation\latex2sympy\latex2sympy2.py, code is 992, comment is 81, blank is 153.
+evaluation\latex2sympy\LICENSE.txt, code is 17, comment is 0, blank is 4.
+evaluation\latex2sympy\PS.g4, code is 536, comment is 23, blank is 94.
+evaluation\latex2sympy\README.md, code is 133, comment is 7, blank is 57.
+evaluation\latex2sympy\requirements.in, code is 2, comment is 0, blank is 0.
+evaluation\latex2sympy\requirements.txt, code is 12, comment is 0, blank is 0.
+evaluation\latex2sympy\sandbox\linalg_equations.py, code is 7, comment is 1, blank is 4.
+evaluation\latex2sympy\sandbox\linalg_span.py, code is 15, comment is 0, blank is 6.
+evaluation\latex2sympy\sandbox\matrix.py, code is 36, comment is 0, blank is 14.
+evaluation\latex2sympy\sandbox\matrix_placeholders.py, code is 51, comment is 9, blank is 15.
+evaluation\latex2sympy\sandbox\sandbox.py, code is 2, comment is 17, blank is 3.
+evaluation\latex2sympy\sandbox\sandbox_equality.py, code is 56, comment is 4, blank is 3.
+evaluation\latex2sympy\sandbox\sectan.py, code is 19, comment is 26, blank is 8.
+evaluation\latex2sympy\sandbox\vector.py, code is 42, comment is 18, blank is 17.
+evaluation\latex2sympy\scripts\compile.sh, code is 4, comment is 3, blank is 2.
+evaluation\latex2sympy\scripts\coverage-ci.sh, code is 1, comment is 1, blank is 1.
+evaluation\latex2sympy\scripts\coverage.sh, code is 15, comment is 5, blank is 3.
+evaluation\latex2sympy\scripts\pre-commit, code is 22, comment is 0, blank is 6.
+evaluation\latex2sympy\scripts\pre-push, code is 22, comment is 0, blank is 6.
+evaluation\latex2sympy\scripts\publish.sh, code is 3, comment is 0, blank is 0.
+evaluation\latex2sympy\scripts\setup-hooks.sh, code is 2, comment is 1, blank is 0.
+evaluation\latex2sympy\scripts\setup.sh, code is 31, comment is 4, blank is 7.
+evaluation\latex2sympy\scripts\test.sh, code is 21, comment is 5, blank is 5.
+evaluation\latex2sympy\setup.cfg, code is 3, comment is 0, blank is 0.
+evaluation\latex2sympy\setup.py, code is 37, comment is 3, blank is 4.
+evaluation\latex2sympy\tests\__init__.py, code is 0, comment is 0, blank is 0.
+evaluation\latex2sympy\tests\abs_test.py, code is 27, comment is 0, blank is 5.
+evaluation\latex2sympy\tests\all_bad_test.py, code is 49, comment is 18, blank is 6.
+evaluation\latex2sympy\tests\all_good_test.py, code is 350, comment is 18, blank is 15.
+evaluation\latex2sympy\tests\atom_expr_test.py, code is 48, comment is 1, blank is 16.
+evaluation\latex2sympy\tests\binomial_test.py, code is 24, comment is 0, blank is 16.
+evaluation\latex2sympy\tests\ceil_test.py, code is 48, comment is 0, blank is 10.
+evaluation\latex2sympy\tests\complex_test.py, code is 14, comment is 0, blank is 8.
+evaluation\latex2sympy\tests\context.py, code is 76, comment is 1, blank is 17.
+evaluation\latex2sympy\tests\exp_test.py, code is 31, comment is 0, blank is 25.
+evaluation\latex2sympy\tests\floor_test.py, code is 50, comment is 0, blank is 10.
+evaluation\latex2sympy\tests\gcd_test.py, code is 215, comment is 0, blank is 23.
+evaluation\latex2sympy\tests\greek_test.py, code is 12, comment is 0, blank is 8.
+evaluation\latex2sympy\tests\grouping_test.py, code is 68, comment is 5, blank is 10.
+evaluation\latex2sympy\tests\lcm_test.py, code is 209, comment is 0, blank is 23.
+evaluation\latex2sympy\tests\left_right_cdot_test.py, code is 6, comment is 0, blank is 4.
+evaluation\latex2sympy\tests\linalg_test.py, code is 21, comment is 0, blank is 7.
+evaluation\latex2sympy\tests\max_test.py, code is 86, comment is 0, blank is 16.
+evaluation\latex2sympy\tests\min_test.py, code is 86, comment is 0, blank is 16.
+evaluation\latex2sympy\tests\mod_test.py, code is 74, comment is 0, blank is 14.
+evaluation\latex2sympy\tests\overline_test.py, code is 8, comment is 0, blank is 4.
+evaluation\latex2sympy\tests\pi_test.py, code is 12, comment is 0, blank is 7.
+evaluation\latex2sympy\tests\trig_test.py, code is 5, comment is 12, blank is 5.
+evaluation\latex2sympy\tests\variable_test.py, code is 145, comment is 0, blank is 43.
+evaluation\LEGAL.md, code is 4, comment is 0, blank is 3.
+evaluation\LICENSE, code is 17, comment is 0, blank is 4.
+evaluation\math_eval.py, code is 470, comment is 44, blank is 81.
+evaluation\math_utils.py, code is 209, comment is 22, blank is 36.
+evaluation\model_utils.py, code is 206, comment is 32, blank is 37.
+evaluation\parser.py, code is 610, comment is 64, blank is 86.
+evaluation\python_executor.py, code is 170, comment is 15, blank is 34.
+evaluation\README.md, code is 96, comment is 3, blank is 35.
+evaluation\requirements.txt, code is 17, comment is 0, blank is 1.
+evaluation\rm_maj_eval.py, code is 83, comment is 1, blank is 19.
+evaluation\sh\eval_greedy.sh, code is 29, comment is 5, blank is 7.
+evaluation\sh\eval_sample_with_seed.sh, code is 37, comment is 6, blank is 9.
+evaluation\sh\install_deps_and_eval.sh, code is 3, comment is 2, blank is 2.
+evaluation\trajectory.py, code is 110, comment is 12, blank is 24.
+evaluation\utils.py, code is 284, comment is 5, blank is 57.
+examples\configs\v0.2-qwen2-math\1.5B-distill\ppo-1.5B-distill-gpus-128.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\1.5B-distill\ppo-1.5B-distill-gpus-32.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\1.5B-distill\ppo-1.5B-distill-gpus-8.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\32B-distill\ppo-32B-distill-gpus-128.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\32B-distill\sft-32B-distill-gpus-128.yaml, code is 45, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\7B-distill\ppo-7B-distill-gpus-128.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\7B-distill\ppo-7B-distill-gpus-32.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\7B-zero\ppo-7B-zero-gpus-128.yaml, code is 71, comment is 0, blank is 1.
+examples\configs\v0.2-qwen2-math\README.md, code is 7, comment is 0, blank is 3.
+examples\configs\v0.3-qwen3-code\14b.yaml, code is 178, comment is 0, blank is 0.
+examples\configs\v0.3-qwen3-code\8b.yaml, code is 178, comment is 0, blank is 0.
+examples\data_preprocess\codeforce_process.py, code is 99, comment is 5, blank is 29.
+examples\data_preprocess\math_code_process.py, code is 188, comment is 10, blank is 48.
+examples\data_preprocess\math_process.py, code is 94, comment is 1, blank is 16.
+examples\data_preprocess\preprocess_training_data.py, code is 57, comment is 4, blank is 17.
+examples\env\scripts\download-dataset.sh, code is 12, comment is 1, blank is 1.
+examples\env\scripts\download-model.sh, code is 10, comment is 1, blank is 1.
+examples\env\scripts\install-dependency.sh, code is 152, comment is 6, blank is 18.
+examples\env\scripts\setup-eval-pip-deps.sh, code is 7, comment is 2, blank is 0.
+examples\env\scripts\setup-pip-deps.sh, code is 10, comment is 4, blank is 1.
+examples\env\setup_env_and_start_train.py, code is 257, comment is 10, blank is 18.
+examples\env\validate_installation.py, code is 159, comment is 22, blank is 56.
+examples\lite\clevr_count_70k_grpo.py, code is 245, comment is 13, blank is 46.
+examples\lite\clevr_count_70k_sft.py, code is 140, comment is 5, blank is 22.
+examples\lite\config_converter.py, code is 750, comment is 63, blank is 66.
+examples\lite\configs\clevr_count_70k_grpo.yaml, code is 130, comment is 0, blank is 17.
+examples\lite\configs\clevr_count_70k_sft.yaml, code is 79, comment is 0, blank is 9.
+examples\lite\configs\gsm8k_grpo.yaml, code is 129, comment is 0, blank is 13.
+examples\lite\configs\gsm8k_hyperparams.md, code is 20, comment is 0, blank is 4.
+examples\lite\configs\gsm8k_sft.yaml, code is 80, comment is 0, blank is 9.
+examples\lite\gsm8k_eval.py, code is 85, comment is 5, blank is 18.
+examples\lite\gsm8k_grpo.py, code is 215, comment is 37, blank is 42.
+examples\lite\gsm8k_sft.py, code is 131, comment is 5, blank is 21.
+examples\run_async_ppo.sh, code is 17, comment is 1, blank is 0.
+examples\run_sft.sh, code is 12, comment is 1, blank is 0.
+examples\run_sync_ppo.sh, code is 14, comment is 1, blank is 0.
+functioncall\__init__.py, code is 0, comment is 1, blank is 0.
+functioncall\base\__init__.py, code is 0, comment is 0, blank is 0.
+functioncall\base\call.py, code is 197, comment is 3, blank is 37.
+functioncall\base\utils.py, code is 34, comment is 3, blank is 10.
+functioncall\code\__init__.py, code is 0, comment is 0, blank is 0.
+functioncall\code\function\handler.py, code is 11, comment is 11, blank is 7.
+functioncall\code\function\testing_util.py, code is 613, comment is 61, blank is 124.
+functioncall\code\local_verify.py, code is 126, comment is 0, blank is 27.
+functioncall\code\verify.py, code is 150, comment is 4, blank is 34.
+functioncall\math\__init__.py, code is 0, comment is 0, blank is 0.
+functioncall\math\function\grader.py, code is 277, comment is 49, blank is 61.
+functioncall\math\function\handler.py, code is 37, comment is 0, blank is 9.
+functioncall\math\function\parser.py, code is 592, comment is 78, blank is 86.
+functioncall\math\verify.py, code is 93, comment is 6, blank is 15.
+functioncall\test\performance_eval.py, code is 238, comment is 11, blank is 51.
+functioncall\test\test_fail_dataset.jsonl, code is 1, comment is 0, blank is 0.
+htmlcov\.gitignore, code is 2, comment is 0, blank is 0.
+htmlcov\class_index.html, code is 131, comment is 0, blank is 0.
+htmlcov\coverage_html_cb_497bf287.js, code is 550, comment is 99, blank is 96.
+htmlcov\favicon_32_cb_58284776.png, it is a binary file.
+htmlcov\function_index.html, code is 291, comment is 0, blank is 0.
+htmlcov\index.html, code is 111, comment is 0, blank is 0.
+htmlcov\keybd_closed_cb_ce680311.png, it is a binary file.
+htmlcov\status.json, code is 1, comment is 0, blank is 0.
+htmlcov\style_cb_dca529e9.css, code is 188, comment is 3, blank is 186.
+htmlcov\z_2626957db87ffcd7_workflow_api_py.html, code is 726, comment is 0, blank is 0.
+LEGAL.md, code is 4, comment is 0, blank is 3.
+LICENSE, code is 150, comment is 1, blank is 26.
+Makefile, code is 5, comment is 0, blank is 1.
+MANIFEST.in, code is 1, comment is 0, blank is 0.
+notebook\math_reflection_zh.ipynb, code is 852, comment is 0, blank is 42.
+pyproject.toml, code is 138, comment is 0, blank is 19.
+pytest.ini, code is 4, comment is 0, blank is 0.
+README.md, code is 188, comment is 28, blank is 62.
+realhf.egg-info\dependency_links.txt, code is 0, comment is 0, blank is 1.
+realhf.egg-info\PKG-INFO, code is 250, comment is 39, blank is 68.
+realhf.egg-info\requires.txt, code is 82, comment is 0, blank is 2.
+realhf.egg-info\SOURCES.txt, code is 1017, comment is 0, blank is 0.
+realhf.egg-info\top_level.txt, code is 15, comment is 0, blank is 0.
+realhf\__init__.py, code is 1, comment is 4, blank is 2.
+realhf\__pycache__\__init__.cpython-310.pyc, it is a binary file.
+realhf\__pycache__\version.cpython-310.pyc, it is a binary file.
+realhf\api\cli_args.py, code is 1213, comment is 71, blank is 204.
+realhf\api\core\agent_api.py, code is 21, comment is 4, blank is 11.
+realhf\api\core\config.py, code is 98, comment is 6, blank is 33.
+realhf\api\core\data_api.py, code is 653, comment is 17, blank is 107.
+realhf\api\core\dfg.py, code is 168, comment is 13, blank is 54.
+realhf\api\core\env_api.py, code is 26, comment is 4, blank is 17.
+realhf\api\core\model_api.py, code is 572, comment is 57, blank is 144.
+realhf\api\core\system_api.py, code is 395, comment is 28, blank is 69.
+realhf\api\from_hf\__init__.py, code is 4, comment is 3, blank is 3.
+realhf\api\from_hf\gemma.py, code is 105, comment is 4, blank is 12.
+realhf\api\from_hf\gpt2.py, code is 200, comment is 5, blank is 29.
+realhf\api\from_hf\llama.py, code is 278, comment is 9, blank is 29.
+realhf\api\from_hf\mistral.py, code is 84, comment is 3, blank is 11.
+realhf\api\from_hf\mixtral.py, code is 225, comment is 6, blank is 21.
+realhf\api\from_hf\qwen2.py, code is 94, comment is 3, blank is 12.
+realhf\api\from_hf\qwen3.py, code is 215, comment is 13, blank is 27.
+realhf\api\quickstart\__init__.py, code is 0, comment is 4, blank is 1.
+realhf\api\quickstart\device_mesh.py, code is 206, comment is 6, blank is 39.
+realhf\api\quickstart\entrypoint.py, code is 101, comment is 8, blank is 22.
+realhf\api\quickstart\search.py, code is 43, comment is 3, blank is 11.
+realhf\apps\__init__.py, code is 0, comment is 3, blank is 0.
+realhf\apps\main.py, code is 355, comment is 21, blank is 51.
+realhf\apps\quickstart.py, code is 112, comment is 19, blank is 37.
+realhf\apps\remote.py, code is 206, comment is 11, blank is 40.
+realhf\base\__init__.py, code is 1, comment is 4, blank is 0.
+realhf\base\__pycache__\__init__.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\datapack.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\logging.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\name_resolve.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\names.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\prologue.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\security.cpython-310.pyc, it is a binary file.
+realhf\base\__pycache__\timeutil.cpython-310.pyc, it is a binary file.
+realhf\base\cluster.py, code is 17, comment is 3, blank is 5.
+realhf\base\constants.py, code is 365, comment is 35, blank is 160.
+realhf\base\datapack.py, code is 165, comment is 9, blank is 34.
+realhf\base\gpu_utils.py, code is 115, comment is 12, blank is 21.
+realhf\base\importing.py, code is 26, comment is 8, blank is 7.
+realhf\base\logging.py, code is 181, comment is 13, blank is 20.
+realhf\base\monitor.py, code is 622, comment is 22, blank is 97.
+realhf\base\name_resolve.py, code is 949, comment is 51, blank is 225.
+realhf\base\names.py, code is 54, comment is 7, blank is 52.
+realhf\base\network.py, code is 67, comment is 4, blank is 15.
+realhf\base\numpy_utils.py, code is 21, comment is 3, blank is 9.
+realhf\base\pkg_version.py, code is 23, comment is 0, blank is 12.
+realhf\base\prologue.py, code is 47, comment is 3, blank is 17.
+realhf\base\ray_utils.py, code is 13, comment is 3, blank is 3.
+realhf\base\recover.py, code is 85, comment is 7, blank is 19.
+realhf\base\saveload_utils.py, code is 64, comment is 4, blank is 14.
+realhf\base\security.py, code is 3, comment is 3, blank is 2.
+realhf\base\seeding.py, code is 41, comment is 3, blank is 14.
+realhf\base\slurm_utils.py, code is 52, comment is 4, blank is 14.
+realhf\base\stats_tracker.py, code is 227, comment is 4, blank is 40.
+realhf\base\testing.py, code is 334, comment is 14, blank is 56.
+realhf\base\timeutil.py, code is 187, comment is 4, blank is 52.
+realhf\base\topology.py, code is 387, comment is 60, blank is 135.
+realhf\experiments\async_exp\async_ppo_math_exp.py, code is 93, comment is 2, blank is 14.
+realhf\experiments\async_exp\async_rl_exp.py, code is 321, comment is 6, blank is 28.
+realhf\experiments\common\check.py, code is 123, comment is 21, blank is 41.
+realhf\experiments\common\common.py, code is 514, comment is 7, blank is 78.
+realhf\experiments\common\math_code_eval_exp.py, code is 103, comment is 4, blank is 16.
+realhf\experiments\common\null_exp.py, code is 104, comment is 1, blank is 20.
+realhf\experiments\common\ppo_math_exp.py, code is 336, comment is 16, blank is 34.
+realhf\experiments\common\sft_exp.py, code is 62, comment is 3, blank is 13.
+realhf\experiments\common\utils.py, code is 328, comment is 9, blank is 42.
+realhf\impl\agent\__init__.py, code is 3, comment is 0, blank is 0.
+realhf\impl\agent\math_multi_turn_agent.py, code is 245, comment is 5, blank is 40.
+realhf\impl\agent\math_single_step_agent.py, code is 218, comment is 5, blank is 25.
+realhf\impl\agent\null_agent.py, code is 43, comment is 3, blank is 11.
+realhf\impl\dataset\__init__.py, code is 6, comment is 4, blank is 3.
+realhf\impl\dataset\math_code_dataset.py, code is 189, comment is 10, blank is 32.
+realhf\impl\dataset\math_parser.py, code is 692, comment is 68, blank is 107.
+realhf\impl\dataset\prompt_answer_dataset.py, code is 84, comment is 7, blank is 18.
+realhf\impl\dataset\prompt_dataset.py, code is 54, comment is 4, blank is 17.
+realhf\impl\dataset\rw_paired_dataset.py, code is 119, comment is 6, blank is 26.
+realhf\impl\environment\__init__.py, code is 1, comment is 0, blank is 0.
+realhf\impl\environment\math_code_single_step_env.py, code is 58, comment is 3, blank is 16.
+realhf\impl\model\__init__.py, code is 65, comment is 11, blank is 26.
+realhf\impl\model\backend\inference.py, code is 198, comment is 10, blank is 22.
+realhf\impl\model\backend\megatron.py, code is 630, comment is 45, blank is 86.
+realhf\impl\model\backend\mock_train.py, code is 196, comment is 5, blank is 36.
+realhf\impl\model\backend\pipe_runner.py, code is 856, comment is 62, blank is 138.
+realhf\impl\model\backend\sglang.py, code is 410, comment is 23, blank is 77.
+realhf\impl\model\backend\thirdparty\megatron\__init__.py, code is 0, comment is 0, blank is 0.
+realhf\impl\model\backend\thirdparty\megatron\v0_6_0\lr_schduler.py, code is 191, comment is 7, blank is 45.
+realhf\impl\model\backend\thirdparty\vllm\__init__.py, code is 4, comment is 1, blank is 1.
+realhf\impl\model\backend\thirdparty\vllm\context.py, code is 96, comment is 13, blank is 33.
+realhf\impl\model\backend\thirdparty\vllm\custom_cache_manager.py, code is 45, comment is 1, blank is 13.
+realhf\impl\model\backend\thirdparty\vllm\engine.py, code is 112, comment is 47, blank is 38.
+realhf\impl\model\backend\thirdparty\vllm\executor.py, code is 175, comment is 44, blank is 40.
+realhf\impl\model\backend\vllm.py, code is 186, comment is 26, blank is 35.
+realhf\impl\model\comm\global_comm.py, code is 136, comment is 7, blank is 21.
+realhf\impl\model\comm\param_realloc.py, code is 488, comment is 23, blank is 50.
+realhf\impl\model\conversion\hf_registry.py, code is 317, comment is 18, blank is 47.
+realhf\impl\model\interface\fused_interface.py, code is 55, comment is 3, blank is 13.
+realhf\impl\model\interface\math_rw_interface.py, code is 432, comment is 13, blank is 73.
+realhf\impl\model\interface\ppo_interface.py, code is 1142, comment is 59, blank is 146.
+realhf\impl\model\interface\sft_interface.py, code is 117, comment is 4, blank is 25.
+realhf\impl\model\modules\__init__.py, code is 7, comment is 3, blank is 1.
+realhf\impl\model\modules\activations.py, code is 91, comment is 21, blank is 40.
+realhf\impl\model\modules\attn.py, code is 257, comment is 24, blank is 28.
+realhf\impl\model\modules\embedding.py, code is 45, comment is 6, blank is 10.
+realhf\impl\model\modules\mlp.py, code is 366, comment is 19, blank is 46.
+realhf\impl\model\modules\moe\__init__.py, code is 4, comment is 3, blank is 1.
+realhf\impl\model\modules\moe\experts.py, code is 173, comment is 12, blank is 33.
+realhf\impl\model\modules\moe\layer.py, code is 53, comment is 2, blank is 11.
+realhf\impl\model\modules\moe\router.py, code is 153, comment is 11, blank is 35.
+realhf\impl\model\modules\moe\token_dispatcher.py, code is 84, comment is 11, blank is 29.
+realhf\impl\model\modules\rms.py, code is 208, comment is 10, blank is 44.
+realhf\impl\model\modules\rotary.py, code is 183, comment is 29, blank is 23.
+realhf\impl\model\nn\flatten_param.py, code is 331, comment is 16, blank is 55.
+realhf\impl\model\nn\real_llm_api.py, code is 784, comment is 40, blank is 96.
+realhf\impl\model\nn\real_llm_base.py, code is 457, comment is 21, blank is 61.
+realhf\impl\model\nn\real_llm_generate.py, code is 701, comment is 47, blank is 119.
+realhf\impl\model\nn\real_llm_parallel.py, code is 335, comment is 17, blank is 53.
+realhf\impl\model\parallelism\pipeline_parallel\instruction.py, code is 84, comment is 9, blank is 53.
+realhf\impl\model\parallelism\pipeline_parallel\p2p.py, code is 29, comment is 14, blank is 16.
+realhf\impl\model\parallelism\pipeline_parallel\static_schedule.py, code is 276, comment is 20, blank is 84.
+realhf\impl\model\parallelism\pipeline_parallel\tensor_storage.py, code is 74, comment is 12, blank is 20.
+realhf\impl\model\parallelism\tensor_parallel\mappings.py, code is 161, comment is 23, blank is 102.
+realhf\impl\model\parallelism\tensor_parallel\modules.py, code is 748, comment is 100, blank is 158.
+realhf\impl\model\parallelism\tensor_parallel\utils.py, code is 111, comment is 12, blank is 46.
+realhf\impl\model\utils\cuda_graph.py, code is 153, comment is 11, blank is 38.
+realhf\impl\model\utils\dpo_functional.py, code is 27, comment is 3, blank is 4.
+realhf\impl\model\utils\functional.py, code is 343, comment is 26, blank is 59.
+realhf\impl\model\utils\logits_warper.py, code is 174, comment is 11, blank is 37.
+realhf\impl\model\utils\moe.py, code is 207, comment is 21, blank is 69.
+realhf\impl\model\utils\padding.py, code is 167, comment is 27, blank is 34.
+realhf\impl\model\utils\ppo_functional.py, code is 263, comment is 12, blank is 62.
+realhf\impl\model\utils\random.py, code is 192, comment is 36, blank is 71.
+realhf\scheduler\client.py, code is 98, comment is 10, blank is 38.
+realhf\scheduler\evaluator.py, code is 291, comment is 24, blank is 33.
+realhf\scheduler\local\client.py, code is 248, comment is 7, blank is 32.
+realhf\scheduler\slurm\client.py, code is 330, comment is 23, blank is 43.
+realhf\scheduler\slurm\utils.py, code is 639, comment is 34, blank is 87.
+realhf\system\__init__.py, code is 59, comment is 5, blank is 14.
+realhf\system\buffer.py, code is 293, comment is 26, blank is 88.
+realhf\system\controller.py, code is 563, comment is 33, blank is 81.
+realhf\system\data_manager.py, code is 376, comment is 22, blank is 57.
+realhf\system\flops_counter.py, code is 101, comment is 5, blank is 11.
+realhf\system\function_executor.py, code is 179, comment is 10, blank is 35.
+realhf\system\generation_server.py, code is 140, comment is 6, blank is 42.
+realhf\system\gserver_manager.py, code is 388, comment is 21, blank is 63.
+realhf\system\master_worker.py, code is 491, comment is 47, blank is 68.
+realhf\system\model_function_call.py, code is 420, comment is 32, blank is 57.
+realhf\system\model_worker.py, code is 1297, comment is 160, blank is 161.
+realhf\system\partial_rollout.py, code is 230, comment is 12, blank is 34.
+realhf\system\push_pull_stream.py, code is 105, comment is 4, blank is 33.
+realhf\system\redistributor.py, code is 303, comment is 15, blank is 42.
+realhf\system\request_reply_stream.py, code is 338, comment is 15, blank is 70.
+realhf\system\rollout_worker.py, code is 302, comment is 23, blank is 49.
+realhf\system\stream_dataset.py, code is 87, comment is 4, blank is 15.
+realhf\system\worker_base.py, code is 551, comment is 15, blank is 129.
+realhf\system\worker_control.py, code is 138, comment is 6, blank is 33.
+realhf\tests\__init__.py, code is 0, comment is 4, blank is 1.
+realhf\tests\agent\test_math_single_step_agent.py, code is 136, comment is 8, blank is 38.
+realhf\tests\comm\test_data_transfer.py, code is 231, comment is 10, blank is 36.
+realhf\tests\comm\test_param_realloc.py, code is 458, comment is 40, blank is 67.
+realhf\tests\cpp_extensions\test_cugae.py, code is 43, comment is 3, blank is 10.
+realhf\tests\cpp_extensions\test_grouped_gemm.py, code is 110, comment is 10, blank is 25.
+realhf\tests\cpp_extensions\test_interval_ops.py, code is 114, comment is 7, blank is 20.
+realhf\tests\data\test_dfg.py, code is 134, comment is 5, blank is 11.
+realhf\tests\data\test_dual_clip.py, code is 33, comment is 8, blank is 7.
+realhf\tests\data\test_epoch_counter.py, code is 42, comment is 0, blank is 7.
+realhf\tests\data\test_load_data.py, code is 78, comment is 8, blank is 14.
+realhf\tests\data\test_sequence_gather_split.py, code is 257, comment is 7, blank is 31.
+realhf\tests\data\test_stats_tracker.py, code is 151, comment is 34, blank is 63.
+realhf\tests\distributed\test_find_port.py, code is 39, comment is 2, blank is 14.
+realhf\tests\distributed\test_name_resolve.py, code is 391, comment is 99, blank is 198.
+realhf\tests\experiments\test_buffer_recover.py, code is 121, comment is 6, blank is 13.
+realhf\tests\experiments\test_math_ppo.py, code is 603, comment is 12, blank is 30.
+realhf\tests\experiments\test_sft.py, code is 77, comment is 2, blank is 12.
+realhf\tests\experiments\utils.py, code is 90, comment is 11, blank is 17.
+realhf\tests\fixtures.py, code is 113, comment is 10, blank is 30.
+realhf\tests\interfaces\test_multi_task_reward.py, code is 103, comment is 3, blank is 11.
+realhf\tests\legacy\test_sglang_tp.py, code is 207, comment is 12, blank is 25.
+realhf\tests\legacy\test_vllm_tp.py, code is 203, comment is 17, blank is 24.
+realhf\tests\model\test_cpu_inference.py, code is 64, comment is 8, blank is 16.
+realhf\tests\model\test_distributed_load_hf.py, code is 151, comment is 13, blank is 18.
+realhf\tests\reward\math_answers_sample_cases.jsonl, code is 10, comment is 0, blank is 0.
+realhf\tests\reward\test_math_reward.py, code is 22, comment is 1, blank is 4.
+realhf\tests\system\test_gserver_manager.py, code is 252, comment is 24, blank is 57.
+realhf\tests\system\test_partial_rollout.py, code is 115, comment is 6, blank is 24.
+realhf\tests\system\test_push_pull_stream.py, code is 134, comment is 23, blank is 75.
+realhf\tests\system\test_stream_dataset.py, code is 130, comment is 12, blank is 36.
+realhf\training\configs\async-ppo.yaml, code is 195, comment is 0, blank is 9.
+realhf\training\configs\sft.yaml, code is 98, comment is 0, blank is 6.
+realhf\training\configs\sync-ppo.yaml, code is 183, comment is 0, blank is 7.
+realhf\training\main_async_ppo.py, code is 49, comment is 4, blank is 17.
+realhf\training\main_sft.py, code is 49, comment is 4, blank is 16.
+realhf\training\main_sync_ppo.py, code is 52, comment is 4, blank is 21.
+realhf\training\utils.py, code is 267, comment is 30, blank is 49.
+realhf\utils.py, code is 26, comment is 0, blank is 6.
+realhf\version.py, code is 50, comment is 0, blank is 6.
+requirements.txt, code is 79, comment is 0, blank is 0.
+setup.py, code is 6, comment is 3, blank is 2.
+test_output.txt, code is 13, comment is 0, blank is 1.
+===============================================================================

@@ -16,8 +16,6 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
 )
 from areal.api.workflow_api import RolloutWorkflow
-from areal.core import WorkflowExecutor
-from areal.core.workflow_executor import WorkflowExecutor
 from areal.utils import logging, name_resolve, names, pkg_version
 
 logger = logging.getLogger(__name__)
@@ -47,22 +45,13 @@ class SGLangEngine(InferenceEngine):
         self.config = config
         self.engine_args = engine_args or {}
 
-        qsize = config.queue_size or config.max_concurrent_rollouts * 10
-        self.input_queue = Queue(maxsize=qsize)
-        self.output_queue = Queue(maxsize=qsize)
-        self.result_cache = []
-
         self._version = 0
-
-        self.workflow_executor = WorkflowExecutor(
-            config=config,
-            inference_engine=self,
-        )
 
     def initialize(
         self,
         engine_id: Optional[str] = None,
         train_data_parallel_size: int | None = None,
+        workflow_executor_factory: Optional[Callable] = None,
     ):
         if engine_id is None:
             if dist.is_initialized():
@@ -74,8 +63,16 @@ class SGLangEngine(InferenceEngine):
 
         self.engine = sgl.Engine(**self.engine_args)
 
-        self.workflow_executor.initialize(
-            logger=self.logger, train_data_parallel_size=train_data_parallel_size
+        # Use provided factory or default to create_workflow_executor
+        if workflow_executor_factory is None:
+            from areal.api.workflow_factory import create_workflow_executor
+            workflow_executor_factory = create_workflow_executor
+
+        self.workflow_executor = workflow_executor_factory(
+            inference_engine=self,
+            config=self.config,
+            logger=self.logger,
+            train_data_parallel_size=train_data_parallel_size,
         )
 
     def destroy(self):

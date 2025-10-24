@@ -4,9 +4,15 @@ This module provides the StalenessManager class which manages capacity
 and staleness constraints for asynchronous rollout generation in RL training.
 """
 
+from __future__ import annotations
+
 from threading import Lock
+from typing import TYPE_CHECKING, List
 
 from areal.api.io_struct import RolloutStat
+
+if TYPE_CHECKING:
+    from areal.core.capacity_modifier import CapacityModifier
 
 
 class StalenessManager:
@@ -32,6 +38,7 @@ class StalenessManager:
         max_concurrent_rollouts: int,
         consumer_batch_size: int,
         max_staleness: int,
+        logger=None,
     ):
         """Initialize the staleness manager.
 
@@ -43,14 +50,23 @@ class StalenessManager:
             Expected batch size for consuming rollouts during training
         max_staleness : int
             Maximum allowed offpolicyness (version difference) for rollouts
+        logger : logging.Logger, optional
+            Logger for debugging and observability
         """
         self.max_concurrent_rollouts = max_concurrent_rollouts
         self.consumer_batch_size = consumer_batch_size
         self.max_staleness = max_staleness
+        self.logger = logger
 
         # Thread-safe access to rollout statistics
         self.lock = Lock()
         self.rollout_stat = RolloutStat()
+
+        # Capacity modifiers for extending capacity calculation
+        self.capacity_modifiers: List["CapacityModifier"] = []
+
+        # Metrics tracking
+        self._last_logged_version = -1
 
     def get_capacity(self, current_version: int) -> int:
         """Calculate available capacity for new rollouts.
@@ -95,9 +111,49 @@ class StalenessManager:
             consumer_bs = max(1, self.consumer_batch_size)
             staleness_capacity = (ofp + current_version + 1) * consumer_bs - sample_cnt
 
-            # Return the minimum of both constraints
-            capacity = min(concurrency_capacity, staleness_capacity)
-            return capacity
+            # Base capacity is the minimum of both constraints
+            base_capacity = min(concurrency_capacity, staleness_capacity)
+
+            # Apply capacity modifiers (sequential application)
+            modified_capacity = base_capacity
+            for modifier in self.capacity_modifiers:
+                modified_capacity = modifier.modify_capacity(
+                    modified_capacity, current_version, self.rollout_stat
+                )
+
+            # Log capacity metrics when version changes (INFO level)
+            if self.logger and current_version != self._last_logged_version:
+                self._last_logged_version = current_version
+                self.logger.info(
+                    f"[StalenessManager] Version {current_version}: "
+                    f"capacity={modified_capacity} (base={base_capacity}, "
+                    f"concurrency={concurrency_capacity}, staleness={staleness_capacity}), "
+                    f"stats(submitted={self.rollout_stat.submitted}, "
+                    f"running={self.rollout_stat.running}, "
+                    f"accepted={self.rollout_stat.accepted})"
+                )
+
+            return modified_capacity
+
+    def register_capacity_modifier(self, modifier: CapacityModifier) -> None:
+        """Register a capacity modifier to extend capacity calculation.
+
+        Capacity modifiers are applied sequentially in registration order.
+        Each modifier receives the output of the previous modifier.
+
+        Parameters
+        ----------
+        modifier : CapacityModifier
+            The capacity modifier to register
+
+        Example
+        -------
+        >>> from areal.core.filtered_capacity_modifier import FilteredSamplesCapacityModifier
+        >>> manager = StalenessManager(...)
+        >>> modifier = FilteredSamplesCapacityModifier(...)
+        >>> manager.register_capacity_modifier(modifier)
+        """
+        self.capacity_modifiers.append(modifier)
 
     def on_rollout_submitted(self) -> None:
         """Callback when a rollout is submitted for execution.

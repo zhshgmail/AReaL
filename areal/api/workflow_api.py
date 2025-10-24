@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 class RolloutWorkflow:
 
     async def arun_episode(
-        self, engine: "InferenceEngine", data: Dict[str, Any]
+        self, engine: InferenceEngine, data: Dict[str, Any]
     ) -> Dict[str, Any] | None | Dict[str, CompletionWithTokenLogpReward]:
         """Run a single episode of the workflow.
 

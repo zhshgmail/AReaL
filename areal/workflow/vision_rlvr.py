@@ -113,6 +113,12 @@ class VisionRLVRWorkflow(RLVRWorkflow):
                 res["multi_modal_input"][0]["image_grid_thw"] = processed_input[
                     "image_grid_thw"
                 ]
+
+            # For segment-wise PPO: Add proximal_logprobs_t if available
+            if resp.proximal_logprobs_t:
+                proximal_logprobs_t = [0.0] * resp.input_len + resp.proximal_logprobs_t
+                res["proximal_logprobs_t"] = torch.tensor(proximal_logprobs_t).unsqueeze(0)
+
             results.append(res)
         if self.dump_dir is not None:
             dump_path = os.path.join(self.dump_dir, str(version))

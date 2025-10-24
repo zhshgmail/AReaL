@@ -192,9 +192,12 @@ class RemoteSGLangEngine(InferenceEngine):
         engine_id: Optional[str] = None,
         addr: str | List[str] | None = None,
         train_data_parallel_size: int | None = None,
+        workflow_executor_factory: Optional[Callable] = None,
     ):
         """Initialize the engine by discovering and connecting to servers."""
-        return self._engine.initialize(engine_id, addr, train_data_parallel_size)
+        return self._engine.initialize(
+            engine_id, addr, train_data_parallel_size, workflow_executor_factory
+        )
 
     def destroy(self):
         """Destroy the engine and clean up resources."""

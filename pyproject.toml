@@ -176,6 +176,10 @@ exclude = ["tests*", "realhf*", "docs*", "examples*", "evaluation*", "benchmark*
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "gpu: tests that require a single GPU",
+    "multi_gpu: tests that require multiple GPUs",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",

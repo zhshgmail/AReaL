@@ -51,6 +51,7 @@ class ModelResponse:
     output_tokens: List[int] = field(default_factory=list)
     output_logprobs: List[float] = field(default_factory=list)
     output_versions: List[int] = field(default_factory=list)
+    proximal_logprobs_t: List[float] = field(default_factory=list)  # Segment-wise PPO
     stop_reason: Literal["length", "stop", "interrupt"] = "stop"
     # tokenizer is used for encode-decode in the inference engine
     tokenizer: Optional[PreTrainedTokenizerFast] = None
