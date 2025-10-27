@@ -47,6 +47,7 @@ class SGLangBackend:
             "sampling_params": sample_params,
             "return_logprob": True,
             "stream": False,
+            "logprob_start_len": -1,  # For segment-wise PPO incremental recompute
         }
 
         # Add LoRA if initialized
@@ -168,6 +169,49 @@ class SGLangBackend:
     def get_health_check_request(self) -> HttpRequest:
         """Get SGLang health check request."""
         return HttpRequest(endpoint="/health", payload={}, method="GET")
+
+    def recompute_output_logprobs_sync(
+        self,
+        server_addr: str,
+        input_ids: List[int],
+        start_index: int,
+        image_data: Optional[List[Any]],
+        timeout: float
+    ) -> List[float]:
+        """Synchronously recompute latest-policy logprobs for output span.
+
+        Args:
+            server_addr: Server address to send request to
+            input_ids: Full sequence (prompt + outputs)
+            start_index: Index to start computing logprobs from
+            image_data: Optional VLM images
+            timeout: Request timeout in seconds
+
+        Returns:
+            List of logprobs for tokens after start_index
+        """
+        import requests
+        url = f"http://{server_addr}/generate"
+        payload = {
+            "input_ids": input_ids,
+            "image_data": image_data or [],
+            "sampling_params": {
+                "top_p": 1.0,
+                "top_k": int(1e8),
+                "max_new_tokens": 0,
+                "temperature": 0.0,
+            },
+            "return_logprob": True,
+            "stream": False,
+            "logprob_start_len": max(0, int(start_index)),
+        }
+        res = requests.post(url, json=payload, timeout=timeout)
+        res.raise_for_status()
+        result = res.json()
+        meta = result["meta_info"]
+        ilp = [x[0] for x in meta["input_token_logprobs"]]
+        # Skip the position at start_index itself; return following tokens
+        return ilp[1:]
 
 
 class RemoteSGLangEngine(InferenceEngine):
