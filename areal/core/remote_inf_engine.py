@@ -400,6 +400,10 @@ class RemoteInfEngine:
         accumulated_output_logprobs = []
         accumulated_versions = []
 
+        # Segment-wise PPO: Track proximal_t (initially same as output_logprobs)
+        # TODO: Implement incremental recompute during abort-resume for better accuracy
+        proximal_logprobs_t = [] if self.config.enable_segment_wise_ppo else None
+
         # A single "rid" shares the same server to allow KV cache reuse
         if req.rid in self.rid_to_address:
             server_addr = self.rid_to_address[req.rid]
@@ -461,6 +465,12 @@ class RemoteInfEngine:
                     [self.get_version()] * len(gen_result.output_tokens)
                 )
 
+                # Segment-wise PPO: Track proximal_t
+                # For newly generated tokens, proximal_t = output_logprobs (same policy)
+                # Note: Incremental recompute during abort-resume not yet implemented
+                if proximal_logprobs_t is not None:
+                    proximal_logprobs_t.extend(gen_result.output_logprobs)
+
                 # Update request for next iteration
                 req.input_ids += gen_result.output_tokens
                 req.gconfig.max_new_tokens -= len(gen_result.output_tokens)
@@ -487,6 +497,7 @@ class RemoteInfEngine:
             output_tokens=accumulated_output_tokens,
             output_logprobs=accumulated_output_logprobs,
             output_versions=accumulated_versions,
+            proximal_logprobs_t=proximal_logprobs_t if proximal_logprobs_t is not None else [],
             stop_reason=stop_reason,
             latency=latency,
             ttft=latency,  # Simplified for non-streaming
@@ -759,6 +770,54 @@ class RemoteInfEngine:
     def resume(self):
         """Resume request submission for async rollout."""
         return self.workflow_executor.resume()
+
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int,
+        image_data: List[Any] | None = None,
+    ) -> List[float]:
+        """Synchronously recompute logprobs for output tokens under current policy.
+
+        This method is used by ProximalRecomputer to update proximal_t for stale
+        samples before weight updates. It performs a prefill-only forward pass to
+        get logprobs under the latest policy.
+
+        Parameters
+        ----------
+        input_ids : List[int]
+            Full sequence including prompt and outputs
+        start_index : int
+            Index to start computing logprobs from (typically prompt_len - 1)
+        image_data : List[Any] | None, optional
+            Optional image data for VLM models
+
+        Returns
+        -------
+        List[float]
+            Logprobs for tokens after start_index (length = len(input_ids) - start_index - 1)
+
+        Raises
+        ------
+        AttributeError
+            If backend does not support recompute_output_logprobs_sync
+        """
+        # Check if backend supports recompute
+        if not hasattr(self.backend, "recompute_output_logprobs_sync"):
+            raise AttributeError(
+                f"Backend {type(self.backend).__name__} does not support "
+                "recompute_output_logprobs_sync. This is required for segment-wise PPO."
+            )
+
+        # Choose a server and delegate to backend
+        server_addr = self.choose_server()
+        return self.backend.recompute_output_logprobs_sync(
+            server_addr=server_addr,
+            input_ids=input_ids,
+            start_index=start_index,
+            image_data=image_data,
+            timeout=self.config.request_timeout,
+        )
 
 
 # Helper functions that run in ProcessPoolExecutor
