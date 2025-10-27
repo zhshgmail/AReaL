@@ -104,6 +104,8 @@ class APIGenerateOutput:
     version_end: List[int] = dataclasses.field(default_factory=list)
     # whether truncated
     no_eos: List[bool] = dataclasses.field(default_factory=list)
+    # per-token policy version for each output token (same shape as output_ids)
+    output_token_versions: List[List[int]] = dataclasses.field(default_factory=list)
 
     # statistics
     latency: float = float("inf")
@@ -139,6 +141,7 @@ class APIGenerateOutput:
             output_logprobs=sum([o.output_logprobs for o in outputs], []),
             version_end=sum([o.version_end for o in outputs], []),
             no_eos=sum([o.no_eos for o in outputs], []),
+            output_token_versions=sum([o.output_token_versions for o in outputs], []),
             latency=max([o.latency for o in outputs]),
             ttft=max([o.ttft for o in outputs]),
             itl=sum([o.itl for o in outputs], []),
@@ -176,6 +179,7 @@ class APIGenerateOutput:
         return logprobs
 
 
+
 @dataclasses.dataclass
 class BundledGenerationOutputs:
     ## Used for collecting generation outputs for env interaction or training. ##
@@ -197,6 +201,8 @@ class BundledGenerationOutputs:
     version_start: List[int]
     # server weight version when generation ends
     version_end: List[int]
+    # per-token policy version for each output token (same shape as output_ids)
+    output_token_versions: List[List[int]] = dataclasses.field(default_factory=list)
 
     @classmethod
     def from_api_outputs(cls, outputs: List[APIGenerateOutput]):
@@ -205,9 +211,16 @@ class BundledGenerationOutputs:
         seqs = []
         logprobs = []
         version_starts = []
+        output_token_versions = []
         for o in outputs:
-            for out in o.output_ids:
+            for idx, out in enumerate(o.output_ids):
                 seqs.append(o.input_ids + out)
+                # output_token_versions: match output_ids shape
+                if o.output_token_versions:
+                    output_token_versions.append(o.output_token_versions[idx])
+                else:
+                    # fallback: fill with version_end if not provided
+                    output_token_versions.append([o.version_end[idx]] * len(out))
             for logp in o.get_logprobs():
                 logprobs.append(logp)
             version_starts += [o.version_start] * o.group_size
@@ -220,6 +233,7 @@ class BundledGenerationOutputs:
             no_eos=sum([o.no_eos for o in outputs], []),
             version_start=version_starts,
             version_end=sum([o.version_end for o in outputs], []),
+            output_token_versions=output_token_versions,
         )
 
     @property
