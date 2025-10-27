@@ -189,3 +189,4 @@ wandb/
 outputs/
 sympy/
 !/docs/figures/*
+sglang/
