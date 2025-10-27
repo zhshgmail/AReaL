@@ -822,6 +822,16 @@ class InferenceEngineConfig:
             "help": "Whether to check the format of produced trajectories of a customized workflow. Useful when debugging the workflow in isolation. Should be False during RL training."
         },
     )
+    enable_segment_wise_ppo: bool = field(
+        default=True,
+        metadata={
+            "help": "Enable segment-wise decoupled PPO with proximal_t tracking and automatic recompute. "
+            "When enabled: (1) proximal_logprobs_t is generated during rollout with per-token version tracking, "
+            "(2) proximal_t is automatically recomputed before weight updates in pause(), "
+            "(3) behav_imp_weight uses proximal_t for segment-wise importance weighting. "
+            "When disabled, the system works exactly as before (standard PPO). Defaults to True."
+        },
+    )
     schedule_policy: str = field(
         default="round_robin",
         metadata={"help": "Request scheduling policy", "choices": ["round_robin"]},
