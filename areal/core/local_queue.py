@@ -138,9 +138,10 @@ class LocalQueue:
             raise
 
     def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:
-        """Put item directly to internal queue (bypasses filters).
+        """Put item to queue after checking filters.
 
-        This is for internal use when filters should not be applied.
+        Filters are checked if filters are registered and context is available.
+        If any filter rejects the item, it is silently dropped (not added).
 
         Parameters
         ----------
@@ -151,11 +152,24 @@ class LocalQueue:
         timeout : float | None, optional
             Timeout in seconds. Default is None.
         """
+        # Check filters if available
+        if self._filters and self._filter_context:
+            for filter_obj in self._filters:
+                try:
+                    if not filter_obj.should_accept(item, self._filter_context):
+                        # Silently drop rejected items
+                        return
+                except Exception:
+                    # On filter error, drop for safety
+                    return
+
+        # Filters passed or no filters, add to queue
         self._queue.put(item, block=block, timeout=timeout)
 
     def put_nowait(self, item: Any) -> None:
-        """Put item to queue after checking filters.
+        """Put item to queue without blocking, after checking filters.
 
+        This is equivalent to put(item, block=False).
         Filters are checked if filters are registered and context is available.
         If any filter rejects the item, it is silently dropped (not added).
 
@@ -163,6 +177,11 @@ class LocalQueue:
         ----------
         item : Any
             Item to put
+
+        Raises
+        ------
+        queue.Full
+            If queue is full and item passes filters
         """
         # Check filters if available
         if self._filters and self._filter_context:
