@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING
 
 from areal.core.async_task_runner import AsyncTaskRunner
 from areal.core.event_system import EventContext, EventRegistry, EventType
-from areal.core.filterable_cache import FilterableCache
-from areal.core.filterable_queue import FilterableQueue
 from areal.core.filters import StalenessFilter
 from areal.core.handlers import ProximalRecomputer
+from areal.core.local_cache import LocalCache
+from areal.core.local_queue import LocalQueue
 from areal.core.staleness_manager import StalenessManager
 from areal.core.workflow_executor import WorkflowExecutor
 
@@ -94,9 +94,9 @@ def create_workflow_executor_with_events(
             logger=None,  # Will be updated during initialize
         )
 
-        # 2. Create FilterableQueue and FilterableCache with context
-        output_queue = FilterableQueue(maxsize=qsize, filter_context=filter_context)
-        result_cache = FilterableCache(filter_context=filter_context)
+        # 2. Create LocalQueue and LocalCache (concrete implementations of QueueAPI/CacheAPI)
+        output_queue = LocalQueue(maxsize=qsize, filter_context=filter_context)
+        result_cache = LocalCache(filter_context=filter_context)
 
         # 3. Create filter
         staleness_filter = StalenessFilter(

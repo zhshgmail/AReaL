@@ -1,7 +1,10 @@
-"""Filterable cache wrapper with admission control.
+"""Local cache implementation with filter support.
 
-This module provides a Cache (list) wrapper that supports filter-based admission control.
-Filters are registered ON the cache and checked during add() operations.
+This module provides a local (in-process) cache implementation using list
+internally, with support for filter-based admission control.
+
+This is one concrete implementation of CacheAPI. Future implementations could use
+Redis, Etcd, Memcached, etc. for distributed caches.
 """
 
 from __future__ import annotations
@@ -9,15 +12,19 @@ from __future__ import annotations
 from typing import Any
 
 
-class FilterableCache:
-    """Cache wrapper with filter-based admission control.
+class LocalCache:
+    """Local (in-process) cache implementation with filter support.
 
-    This class wraps a list and adds filter support.
-    Filters are checked when items are added via add() method.
+    This class implements CacheAPI using list internally, with support
+    for filter-based admission control. Filters are registered on the cache
+    and checked during append operations.
 
-    The cache itself owns the filters and doesn't expose them to consumers.
-    From WorkflowExecutor's perspective, it just calls add() and may get
-    rejections, but doesn't know WHY items are rejected.
+    The cache owns its filters and doesn't expose them to consumers.
+    From WorkflowExecutor's perspective, it just calls append() and doesn't
+    know WHY items might be rejected.
+
+    This is suitable for single-process applications. For distributed systems,
+    use RedisCache, EtcdCache, or other distributed implementations.
 
     Attributes
     ----------
@@ -25,14 +32,14 @@ class FilterableCache:
         Internal list for storage
     _filters : list
         List of filters registered on this cache
+    _filter_context : Any
+        Context passed to filters when checking items
 
     Examples
     --------
-    >>> cache = FilterableCache()
+    >>> cache = LocalCache()
     >>> cache.register_filter(StalenessFilter(max_staleness=2))
-    >>> success = cache.add(item, context)
-    >>> if not success:
-    ...     print("Item rejected by filter")
+    >>> cache.append(item)  # May be silently dropped by filter
     """
 
     def __init__(self, filter_context: Any | None = None):

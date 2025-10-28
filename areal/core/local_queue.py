@@ -1,7 +1,10 @@
-"""Filterable queue wrapper with admission control.
+"""Local queue implementation with filter support.
 
-This module provides a Queue wrapper that supports filter-based admission control.
-Filters are registered ON the queue and checked during add() operations.
+This module provides a local (in-process) queue implementation using queue.Queue
+internally, with support for filter-based admission control.
+
+This is one concrete implementation of QueueAPI. Future implementations could use
+ZeroMQ, Redis, Etcd, etc. for distributed queues.
 """
 
 from __future__ import annotations
@@ -10,15 +13,19 @@ import queue
 from typing import Any
 
 
-class FilterableQueue:
-    """Queue wrapper with filter-based admission control.
+class LocalQueue:
+    """Local (in-process) queue implementation with filter support.
 
-    This class wraps a standard queue.Queue and adds filter support.
-    Filters are checked when items are added via add() method.
+    This class implements QueueAPI using queue.Queue internally, with support
+    for filter-based admission control. Filters are registered on the queue
+    and checked during put operations.
 
-    The queue itself owns the filters and doesn't expose them to consumers.
-    From AsyncTaskRunner's perspective, it just calls add() and may get
-    rejections, but doesn't know WHY items are rejected.
+    The queue owns its filters and doesn't expose them to consumers.
+    From AsyncTaskRunner's perspective, it just calls put() and doesn't
+    know WHY items might be rejected.
+
+    This is suitable for single-process applications. For distributed systems,
+    use ZeroMQQueue, RedisQueue, or other distributed implementations.
 
     Attributes
     ----------
@@ -26,14 +33,14 @@ class FilterableQueue:
         Internal queue for storage
     _filters : list
         List of filters registered on this queue
+    _filter_context : Any
+        Context passed to filters when checking items
 
     Examples
     --------
-    >>> queue = FilterableQueue(maxsize=10)
+    >>> queue = LocalQueue(maxsize=10)
     >>> queue.register_filter(StalenessFilter(max_staleness=2))
-    >>> success = queue.add(item, context)
-    >>> if not success:
-    ...     print("Item rejected by filter")
+    >>> queue.put_nowait(item)  # May be silently dropped by filter
     """
 
     def __init__(self, maxsize: int = 0, filter_context: Any | None = None):

@@ -1,6 +1,6 @@
 """Event handlers for queue and cache.
 
-These classes implement EventHandler protocol and wrap FilterableQueue/Cache,
+These classes implement EventHandler protocol and wrap LocalQueue/LocalCache,
 allowing queue/cache to respond to system events while maintaining single
 responsibility principle.
 """
@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from areal.core.event_system import EventContext
-    from areal.core.filterable_cache import FilterableCache
-    from areal.core.filterable_queue import FilterableQueue
+    from areal.core.local_cache import LocalCache
+    from areal.core.local_queue import LocalQueue
 
 
 class QueueEventHandler:
-    """Event handler for FilterableQueue.
+    """Event handler for LocalQueue (or any QueueAPI implementation).
 
-    This class wraps a FilterableQueue and implements EventHandler protocol,
+    This class wraps a queue and implements EventHandler protocol,
     allowing the queue to respond to system events without violating SRP.
 
     The queue itself remains a simple data structure with filters.
@@ -26,22 +26,22 @@ class QueueEventHandler:
 
     Parameters
     ----------
-    queue : FilterableQueue
+    queue : LocalQueue (or any QueueAPI implementation)
         The queue to handle events for
 
     Examples
     --------
-    >>> queue = FilterableQueue(maxsize=100)
+    >>> queue = LocalQueue(maxsize=100)
     >>> handler = QueueEventHandler(queue)
     >>> registry.register_handler(EventType.PRE_UPDATE, handler)
     """
 
-    def __init__(self, queue: "FilterableQueue"):
+    def __init__(self, queue: "LocalQueue"):
         """Initialize handler with queue.
 
         Parameters
         ----------
-        queue : FilterableQueue
+        queue : LocalQueue (or any QueueAPI implementation)
             Queue to handle events for
         """
         self.queue = queue
@@ -69,9 +69,9 @@ class QueueEventHandler:
 
 
 class CacheEventHandler:
-    """Event handler for FilterableCache.
+    """Event handler for LocalCache (or any CacheAPI implementation).
 
-    This class wraps a FilterableCache and implements EventHandler protocol,
+    This class wraps a cache and implements EventHandler protocol,
     allowing the cache to respond to system events without violating SRP.
 
     The cache itself remains a simple data structure with filters.
@@ -79,22 +79,22 @@ class CacheEventHandler:
 
     Parameters
     ----------
-    cache : FilterableCache
+    cache : LocalCache (or any CacheAPI implementation)
         The cache to handle events for
 
     Examples
     --------
-    >>> cache = FilterableCache()
+    >>> cache = LocalCache()
     >>> handler = CacheEventHandler(cache)
     >>> registry.register_handler(EventType.PRE_UPDATE, handler)
     """
 
-    def __init__(self, cache: "FilterableCache"):
+    def __init__(self, cache: "LocalCache"):
         """Initialize handler with cache.
 
         Parameters
         ----------
-        cache : FilterableCache
+        cache : LocalCache (or any CacheAPI implementation)
             Cache to handle events for
         """
         self.cache = cache
@@ -116,6 +116,6 @@ class CacheEventHandler:
         # Placeholder for future cache-specific event handling
         # For example:
         # - On PRE_UPDATE: scan cache and log statistics
-        # - On POST_UPDATE: clear stale items
+        # - ON POST_UPDATE: clear stale items
         # - On BEFORE_PAUSE: checkpoint cache state
         pass
