@@ -141,6 +141,65 @@ class VLLMBackend:
         """Get vLLM health check request."""
         return HttpRequest(endpoint="/health", payload={}, method="GET")
 
+    def recompute_output_logprobs_sync(
+        self,
+        server_addr: str,
+        input_ids: List[int],
+        start_index: int,
+        image_data: Optional[List[Any]],
+        timeout: float,
+    ) -> List[float]:
+        """Synchronously recompute latest-policy logprobs for output span.
+
+        This method recomputes logprobs for tokens after start_index using
+        the current policy weights, which is essential for segment-wise
+        decoupled PPO.
+
+        Args:
+            server_addr: Server address to send request to
+            input_ids: Full sequence (prompt + outputs)
+            start_index: Index to start computing logprobs from
+            image_data: Optional VLM images (not supported by vLLM)
+            timeout: Request timeout in seconds
+
+        Returns:
+            List of logprobs for tokens after start_index
+
+        Notes:
+            vLLM computes logprobs for all tokens in the sequence when
+            logprobs parameter is set. We extract only the tokens after
+            start_index.
+        """
+        import requests
+
+        if image_data:
+            raise NotImplementedError("vLLM does not support VLM image data yet.")
+
+        url = f"http://{server_addr}/v1/completions"
+        payload = {
+            "prompt": input_ids,
+            "max_tokens": 0,  # No new generation, just compute logprobs
+            "temperature": 0.0,
+            "logprobs": 1,  # Request logprobs for the actual tokens
+            "return_tokens_as_token_ids": True,
+            "stream": False,
+        }
+
+        res = requests.post(url, json=payload, timeout=timeout)
+        res.raise_for_status()
+        result = res.json()
+
+        meta_info = result["choices"][0]
+        logprobs_data = meta_info["logprobs"]
+
+        # vLLM returns token_logprobs for all tokens in the prompt
+        # Extract logprobs for tokens after start_index
+        all_logprobs = logprobs_data["token_logprobs"]
+
+        # Skip the position at start_index itself; return following tokens
+        # start_index+1 because we want tokens AFTER start_index
+        return all_logprobs[start_index + 1 :]
+
 
 class RemotevLLMEngine(InferenceEngine):
     """vLLM remote inference engine.
@@ -248,3 +307,33 @@ class RemotevLLMEngine(InferenceEngine):
 
     def continue_generation(self):
         return self._engine.continue_generation()
+
+    def recompute_output_logprobs_sync(
+        self,
+        input_ids: List[int],
+        start_index: int,
+        image_data: List[Any] | None = None,
+    ) -> List[float]:
+        """Synchronously recompute logprobs for output tokens under current policy.
+
+        This method is used by ProximalRecomputer to update proximal_t for stale
+        samples before weight updates. It performs a prefill-only forward pass to
+        get logprobs under the latest policy.
+
+        Parameters
+        ----------
+        input_ids : List[int]
+            Full sequence including prompt and outputs
+        start_index : int
+            Index to start computing logprobs from (typically prompt_len - 1)
+        image_data : List[Any] | None, optional
+            Optional image data (not supported by vLLM)
+
+        Returns
+        -------
+        List[float]
+            Logprobs for tokens after start_index
+        """
+        return self._engine.recompute_output_logprobs_sync(
+            input_ids, start_index, image_data
+        )
