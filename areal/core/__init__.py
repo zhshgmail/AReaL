@@ -3,7 +3,6 @@
 from areal.api.event_api import EventContext, EventHandler, EventType
 from areal.api.filter_api import Filter
 
-from .event_factory import create_workflow_executor_with_events
 from .event_system import EventRegistry
 from .filters import StalenessFilter
 from .handlers import (
@@ -20,7 +19,10 @@ from .workflow_executor import (
     WorkflowExecutor,
     check_trajectory_format,
 )
-from .workflow_factory import create_workflow_executor
+from .workflow_factory import (
+    create_workflow_executor,
+    create_workflow_executor_with_events,
+)
 
 __all__ = [
     "RemoteInfBackendProtocol",
