@@ -567,7 +567,7 @@ class RemoteInfEngine:
 
         # Fire PRE_UPDATE event BEFORE weight update
         if self.event_registry is not None:
-            from areal.core.event_system import EventContext, EventType
+            from areal.api.event_api import EventContext, EventType
 
             old_version = self.get_version()
             context = EventContext(
@@ -576,14 +576,13 @@ class RemoteInfEngine:
                 config=self.config,
                 logger=self.logger,
                 data={
-                    "queue": self.workflow_executor.runner.output_queue,
-                    "cache": self.workflow_executor._pending_results,
                     "old_version": old_version,
                 },
             )
             self.logger.debug(
                 f"Firing PRE_UPDATE event before distributed weight update (v{old_version} -> v{old_version + 1})"
             )
+            # EventPropagator will propagate this to queue and cache
             self.event_registry.fire_event(context)
             self.logger.debug("PRE_UPDATE event completed")
 
@@ -599,7 +598,7 @@ class RemoteInfEngine:
         def callback(fut):
             # Fire POST_UPDATE event AFTER weight update completes
             if self.event_registry is not None:
-                from areal.core.event_system import EventContext, EventType
+                from areal.api.event_api import EventContext, EventType
 
                 new_version = self.get_version()
                 context = EventContext(
@@ -644,7 +643,7 @@ class RemoteInfEngine:
         # Fire PRE_UPDATE event BEFORE weight update
         # This is where recompute happens using CURRENT policy
         if self.event_registry is not None:
-            from areal.core.event_system import EventContext, EventType
+            from areal.api.event_api import EventContext, EventType
 
             old_version = self.get_version()
             context = EventContext(
@@ -653,14 +652,13 @@ class RemoteInfEngine:
                 config=self.config,
                 logger=self.logger,
                 data={
-                    "queue": self.workflow_executor.runner.output_queue,
-                    "cache": self.workflow_executor._pending_results,
                     "old_version": old_version,
                 },
             )
             self.logger.debug(
                 f"Firing PRE_UPDATE event before weight update (v{old_version} -> v{old_version + 1})"
             )
+            # EventPropagator will propagate this to queue and cache
             self.event_registry.fire_event(context)
             self.logger.debug("PRE_UPDATE event completed")
 
@@ -691,7 +689,7 @@ class RemoteInfEngine:
 
             # Fire POST_UPDATE event AFTER weight update completes
             if self.event_registry is not None:
-                from areal.core.event_system import EventContext, EventType
+                from areal.api.event_api import EventContext, EventType
 
                 new_version = self.get_version()
                 context = EventContext(
