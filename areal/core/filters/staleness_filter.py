@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING
 import torch
 from tensordict import TensorDict
 
-from areal.core.event_system import EventContext, QueueFilter
+from areal.api.event_api import EventContext
+from areal.api.filter_api import Filter
 
 if TYPE_CHECKING:
     from areal.api.cli_args import InferenceEngineConfig
@@ -21,10 +22,10 @@ if TYPE_CHECKING:
 RECOMPUTE_VERSION_KEY = "_recompute_version"
 
 
-class StalenessFilter(QueueFilter):
+class StalenessFilter(Filter):
     """Filter that rejects over-stale samples at queue/cache admission.
 
-    This is a QueueFilter that checks staleness when items are added to
+    This is a Filter that checks staleness when items are added to
     queue or cache. It rejects samples exceeding the staleness threshold.
 
     Staleness calculation:
