@@ -1,17 +1,24 @@
 """Core components for AREAL."""
 
-from .queue_transformer import QueueTransformer, TransformerContext
+from .event_factory import create_workflow_executor_with_events
+from .event_system import (
+    EventContext,
+    EventHandler,
+    EventRegistry,
+    EventType,
+    QueueFilter,
+)
+from .filters import StalenessFilter
+from .handlers import (
+    RECOMPUTE_VERSION_KEY,
+    ProximalRecomputer,
+    ensure_recompute_key,
+)
 from .remote_inf_engine import (
     RemoteInfBackendProtocol,
     RemoteInfEngine,
 )
 from .staleness_manager import StalenessManager
-from .transformers import (
-    RECOMPUTE_VERSION_KEY,
-    ProximalRecomputer,
-    StalenessFilter,
-    ensure_recompute_key,
-)
 from .workflow_executor import (
     WorkflowExecutor,
     check_trajectory_format,
@@ -25,10 +32,16 @@ __all__ = [
     "WorkflowExecutor",
     "check_trajectory_format",
     "create_workflow_executor",
-    "QueueTransformer",
-    "TransformerContext",
-    "ProximalRecomputer",
+    "create_workflow_executor_with_events",
+    # Event-driven architecture
+    "EventType",
+    "EventContext",
+    "EventRegistry",
+    "QueueFilter",
+    "EventHandler",
+    # Filters and handlers
     "StalenessFilter",
+    "ProximalRecomputer",
     "RECOMPUTE_VERSION_KEY",
     "ensure_recompute_key",
 ]

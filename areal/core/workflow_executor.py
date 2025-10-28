@@ -15,7 +15,6 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from areal.api.cli_args import InferenceEngineConfig
 from areal.api.workflow_api import RolloutWorkflow
 from areal.core.async_task_runner import AsyncTaskRunner, TaskQueueFullError
-from areal.core.queue_transformer import QueueTransformer, TransformerContext
 from areal.core.staleness_manager import StalenessManager
 from areal.experimental.openai.types import CompletionWithTokenLogpReward
 from areal.utils import logging
@@ -255,8 +254,6 @@ class WorkflowExecutor:
         config: InferenceEngineConfig,
         inference_engine: InferenceEngine,
         staleness_manager: StalenessManager | None = None,
-        pre_pause_transformers: list[QueueTransformer] | None = None,
-        pre_wait_transformers: list[QueueTransformer] | None = None,
     ):
         self.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
@@ -269,10 +266,6 @@ class WorkflowExecutor:
         # Use provided staleness manager or create a default one
         # The manager will be properly initialized in initialize()
         self.staleness_manager = staleness_manager
-
-        # Transformers for segment-wise PPO and other queue/cache operations
-        self.pre_pause_transformers = pre_pause_transformers or []
-        self.pre_wait_transformers = pre_wait_transformers or []
 
         # Create the generic async task runner
         qsize = config.queue_size or self.max_concurrent_rollouts * 16
@@ -287,9 +280,6 @@ class WorkflowExecutor:
         # Cache for tracking inputs and accepted/rejected results
         self._pending_results: list[dict[str, Any]] = []
         self._pending_inputs: list[_RolloutTaskInput] = []
-
-        # Context for transformers (will be initialized in initialize())
-        self._transformer_context: TransformerContext | None = None
 
     def initialize(self, logger=None, train_data_parallel_size: int | None = None):
         """Initialize the workflow executor and start the async task runner.
@@ -331,13 +321,6 @@ class WorkflowExecutor:
                 consumer_batch_size=consumer_batch_size,
                 max_staleness=self.config.max_head_offpolicyness,
             )
-
-        # Initialize transformer context (shared by all transformers)
-        self._transformer_context = TransformerContext(
-            engine=self.inference_engine,
-            config=self.config,
-            logger=logger,
-        )
 
         # Initialize filter context for add filters (used by AsyncTaskRunner)
         # This needs to be done before runner.initialize() so filters can access it
@@ -570,17 +553,6 @@ class WorkflowExecutor:
         results = self._pending_results[:count]
         self._pending_results = self._pending_results[count:]
 
-        # Apply pre-wait transformers (e.g., StalenessFilter)
-        # This filters stale samples before returning to trainer
-        if self.pre_wait_transformers and self._transformer_context:
-            for transformer in self.pre_wait_transformers:
-                try:
-                    results = transformer.apply(results, self._transformer_context)
-                except Exception as e:
-                    self.logger.error(
-                        f"Error applying pre-wait transformer {type(transformer).__name__}: {e}"
-                    )
-
         # Shuffle for randomness (helps with data diversity)
         random.shuffle(results)
 
@@ -650,27 +622,9 @@ class WorkflowExecutor:
     def pause(self):
         """Pause request submission for async rollout.
 
-        Applies pre-pause transformers (e.g., ProximalRecomputer) before pausing.
-        This ensures samples are processed before weight updates.
-
         See :meth:`~areal.api.engine_api.InferenceEngine.pause` for detailed
         documentation.
         """
-        # Apply pre-pause transformers to pending results
-        # This is typically where ProximalRecomputer runs to update proximal_t
-        # for v-1 samples before weight updates
-        if self.pre_pause_transformers and self._transformer_context:
-            for transformer in self.pre_pause_transformers:
-                try:
-                    self._pending_results = transformer.apply(
-                        self._pending_results, self._transformer_context
-                    )
-                except Exception as e:
-                    self.logger.error(
-                        f"Error applying pre-pause transformer {type(transformer).__name__}: {e}"
-                    )
-
-        # Then pause the runner
         self.runner.pause()
 
     def resume(self):
