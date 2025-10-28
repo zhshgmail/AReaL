@@ -228,6 +228,7 @@ class RemoteInfEngine:
         self.lora_initialized = False
 
         self.workflow_executor: WorkflowExecutor
+        self.event_registry = None  # Will be set by factory if using events
 
     def _wait_for_server(self, address):
         """Wait for a server to become healthy."""
@@ -560,6 +561,28 @@ class RemoteInfEngine:
         """
         assert meta.type == current_platform.communication_backend
 
+        # Fire PRE_UPDATE event BEFORE weight update
+        if self.event_registry is not None:
+            from areal.core.event_system import EventContext, EventType
+
+            old_version = self.get_version()
+            context = EventContext(
+                event_type=EventType.BEFORE_POLICY_UPDATE,
+                engine=self,
+                config=self.config,
+                logger=self.logger,
+                data={
+                    "queue": self.workflow_executor.runner.output_queue,
+                    "cache": self.workflow_executor._pending_results,
+                    "old_version": old_version,
+                },
+            )
+            self.logger.debug(
+                f"Firing PRE_UPDATE event before distributed weight update (v{old_version} -> v{old_version + 1})"
+            )
+            self.event_registry.fire_event(context)
+            self.logger.debug("PRE_UPDATE event completed")
+
         fut = self.executor.submit(
             _update_weights_from_distributed,
             self.backend,
@@ -568,6 +591,26 @@ class RemoteInfEngine:
             self.addresses,
             self.config.request_timeout,
         )
+
+        def callback(fut):
+            # Fire POST_UPDATE event AFTER weight update completes
+            if self.event_registry is not None:
+                from areal.core.event_system import EventContext, EventType
+
+                new_version = self.get_version()
+                context = EventContext(
+                    event_type=EventType.AFTER_POLICY_UPDATE,
+                    engine=self,
+                    config=self.config,
+                    logger=self.logger,
+                    data={
+                        "new_version": new_version,
+                    },
+                )
+                self.logger.debug(f"Firing POST_UPDATE event after distributed weight update (v{new_version})")
+                self.event_registry.fire_event(context)
+
+        fut.add_done_callback(callback)
 
         return fut
 
@@ -594,6 +637,29 @@ class RemoteInfEngine:
                 "Experiment and trial names must be set for disk-based weight updates."
             )
 
+        # Fire PRE_UPDATE event BEFORE weight update
+        # This is where recompute happens using CURRENT policy
+        if self.event_registry is not None:
+            from areal.core.event_system import EventContext, EventType
+
+            old_version = self.get_version()
+            context = EventContext(
+                event_type=EventType.BEFORE_POLICY_UPDATE,
+                engine=self,
+                config=self.config,
+                logger=self.logger,
+                data={
+                    "queue": self.workflow_executor.runner.output_queue,
+                    "cache": self.workflow_executor._pending_results,
+                    "old_version": old_version,
+                },
+            )
+            self.logger.debug(
+                f"Firing PRE_UPDATE event before weight update (v{old_version} -> v{old_version + 1})"
+            )
+            self.event_registry.fire_event(context)
+            self.logger.debug("PRE_UPDATE event completed")
+
         fut = self.executor.submit(
             _update_weights_from_disk,
             self.backend,
@@ -618,6 +684,23 @@ class RemoteInfEngine:
             if meta.use_lora:
                 self.lora_initialized = True
             shutil.rmtree(meta.path, ignore_errors=True)
+
+            # Fire POST_UPDATE event AFTER weight update completes
+            if self.event_registry is not None:
+                from areal.core.event_system import EventContext, EventType
+
+                new_version = self.get_version()
+                context = EventContext(
+                    event_type=EventType.AFTER_POLICY_UPDATE,
+                    engine=self,
+                    config=self.config,
+                    logger=self.logger,
+                    data={
+                        "new_version": new_version,
+                    },
+                )
+                self.logger.debug(f"Firing POST_UPDATE event after weight update (v{new_version})")
+                self.event_registry.fire_event(context)
 
         fut.add_done_callback(callback)
 

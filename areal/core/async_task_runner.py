@@ -191,9 +191,37 @@ class AsyncTaskRunner(Generic[T]):
         self._thread_exception_lock = threading.Lock()
         self._thread_exception: Exception | None = None
 
+        # Filter support for admission control
+        self.add_filters: list = []
+        self.filter_context: Any = None
+
         # Will be set in initialize()
         self.logger = None
         self.thread: threading.Thread | None = None
+
+    def register_add_filter(self, filter_obj) -> None:
+        """Register a filter for admission control.
+
+        Filters are checked when items are added to the output queue.
+        If any filter rejects an item (returns False from should_accept),
+        the item will not be added to the output queue.
+
+        Parameters
+        ----------
+        filter_obj : QueueFilter
+            Filter implementing should_accept(item, context) -> bool
+        """
+        self.add_filters.append(filter_obj)
+
+    def set_filter_context(self, context: Any) -> None:
+        """Set the context passed to filters during should_accept checks.
+
+        Parameters
+        ----------
+        context : Any
+            Context object (typically EventContext) passed to filters
+        """
+        self.filter_context = context
 
     def initialize(self, logger=None):
         """Initialize and start the background thread.
@@ -333,15 +361,39 @@ class AsyncTaskRunner(Generic[T]):
                         result = None
 
                     try:
-                        # Place result in output queue
-                        self.output_queue.put_nowait(
-                            _TimedResult(create_time=task_obj.create_time, data=result)
-                        )
-                        if self.enable_tracing and self.logger:
-                            self.logger.info(
-                                f"AsyncTaskRunner: Completed task {tid}. "
-                                f"Running: {len(running_tasks)}"
+                        # Check add filters before putting to output queue
+                        should_add = True
+                        if result is not None and self.add_filters and self.filter_context:
+                            for filter_obj in self.add_filters:
+                                try:
+                                    if not filter_obj.should_accept(result, self.filter_context):
+                                        should_add = False
+                                        if self.logger:
+                                            self.logger.debug(
+                                                f"Task {tid} result rejected by filter "
+                                                f"{type(filter_obj).__name__}"
+                                            )
+                                        break
+                                except Exception as e:
+                                    if self.logger:
+                                        self.logger.error(
+                                            f"Error in filter {type(filter_obj).__name__}: {e}",
+                                            exc_info=True,
+                                        )
+                                    # On filter error, reject the item for safety
+                                    should_add = False
+                                    break
+
+                        # Place result in output queue if not rejected
+                        if should_add:
+                            self.output_queue.put_nowait(
+                                _TimedResult(create_time=task_obj.create_time, data=result)
                             )
+                            if self.enable_tracing and self.logger:
+                                self.logger.info(
+                                    f"AsyncTaskRunner: Completed task {tid}. "
+                                    f"Running: {len(running_tasks)}"
+                                )
                     except queue.Full:
                         # This is a critical error that should stop the runner.
                         # Re-add task so it can be cancelled in finally.

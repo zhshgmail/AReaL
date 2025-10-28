@@ -339,6 +339,28 @@ class WorkflowExecutor:
             logger=logger,
         )
 
+        # Initialize filter context for add filters (used by AsyncTaskRunner)
+        # This needs to be done before runner.initialize() so filters can access it
+        if hasattr(self, "_staleness_filter") and self._staleness_filter:
+            from areal.core.event_system import EventContext, EventType
+
+            # Create filter context (event type doesn't matter for admission control)
+            filter_context = EventContext(
+                event_type=EventType.BEFORE_PAUSE,  # Placeholder, not used by filters
+                engine=self.inference_engine,
+                config=self.config,
+                logger=logger,
+            )
+
+            # Configure runner with filter and context
+            self.runner.set_filter_context(filter_context)
+            self.runner.register_add_filter(self._staleness_filter)
+
+            logger.debug(
+                f"Registered filter {type(self._staleness_filter).__name__} "
+                "for output queue admission control"
+            )
+
         # Initialize the generic async task runner
         self.runner.initialize(logger=logger)
 

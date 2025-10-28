@@ -100,6 +100,9 @@ def create_workflow_executor_with_events(
         executor._staleness_filter = staleness_filter
         executor._event_registry = registry
 
+        # Connect engine with event registry so it can fire events
+        inference_engine.event_registry = registry
+
         # Log configuration
         if hasattr(executor, "logger") and executor.logger:
             executor.logger.debug(
@@ -110,6 +113,7 @@ def create_workflow_executor_with_events(
         # Standard PPO mode - no filters or handlers
         executor._staleness_filter = None
         executor._event_registry = registry
+        inference_engine.event_registry = None
 
         if hasattr(executor, "logger") and executor.logger:
             executor.logger.debug("Configured for standard PPO (no filters/handlers)")
