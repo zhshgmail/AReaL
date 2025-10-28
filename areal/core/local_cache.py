@@ -1,7 +1,7 @@
 """Local cache implementation with filter support.
 
 This module provides a local (in-process) cache implementation using list
-internally, with support for filter-based admission control.
+internally, with support for filter-based admission control and event handling.
 
 This is one concrete implementation of CacheAPI. Future implementations could use
 Redis, Etcd, Memcached, etc. for distributed caches.
@@ -9,7 +9,11 @@ Redis, Etcd, Memcached, etc. for distributed caches.
 
 from __future__ import annotations
 
-from typing import Any
+import traceback
+from typing import Any, Callable
+
+from areal.api.cache_event_handler import CacheEventContext
+from areal.api.event_api import EventContext
 
 
 class LocalCache:
@@ -42,17 +46,33 @@ class LocalCache:
     >>> cache.append(item)  # May be silently dropped by filter
     """
 
-    def __init__(self, filter_context: Any | None = None):
-        """Initialize filterable cache.
+    def __init__(
+        self,
+        filter_context: Any | None = None,
+        engine: Any | None = None,
+        config: Any | None = None,
+        logger: Any | None = None,
+    ):
+        """Initialize filterable cache with event support.
 
         Parameters
         ----------
         filter_context : Any | None, optional
             Context passed to filters when checking items. Default is None.
+        engine : Any | None, optional
+            Inference engine reference. Default is None.
+        config : Any | None, optional
+            Configuration object. Default is None.
+        logger : Any | None, optional
+            Logger instance. Default is None.
         """
         self._cache: list[Any] = []
         self._filters: list = []
         self._filter_context: Any = filter_context
+        self._event_handlers: list = []
+        self._engine = engine
+        self._config = config
+        self._logger = logger
 
     def register_filter(self, filter_obj) -> None:
         """Register a filter for admission control.
@@ -209,3 +229,96 @@ class LocalCache:
             Popped item
         """
         return self._cache.pop(index)
+
+    def register_event_handler(self, handler) -> None:
+        """Register a cache event handler.
+
+        Parameters
+        ----------
+        handler : CacheEventHandler
+            Handler implementing on_cache_event(context)
+        """
+        self._event_handlers.append(handler)
+
+    def on_event(self, context: EventContext) -> None:
+        """Handle global event by propagating to cache event handlers.
+
+        This method is called by EventPropagator when a global event fires.
+        It creates a CacheEventContext with metadata and calls registered
+        cache event handlers.
+
+        Parameters
+        ----------
+        context : EventContext
+            Global event context
+        """
+        if not self._event_handlers:
+            return
+
+        # Create cache-specific context with metadata
+        cache_context = CacheEventContext(
+            event_type=context.event_type,
+            engine=self._engine or context.engine,
+            config=self._config or context.config,
+            logger=self._logger or context.logger,
+            cache_metadata={
+                "size": len(self._cache),
+                # Provide access method for processing items
+                "process_items": self.process_all_items,
+            },
+        )
+
+        # Propagate to cache event handlers
+        for handler in self._event_handlers:
+            try:
+                handler.on_cache_event(cache_context)
+            except Exception as e:
+                if self._logger:
+                    self._logger.error(
+                        f"Error in cache event handler {type(handler).__name__}: {e}"
+                    )
+                    traceback.print_exc()
+
+    def process_all_items(
+        self,
+        processor: Callable[[Any, int], int],
+    ) -> int:
+        """Process all items in the cache using a processor function.
+
+        This method provides safe access to cache items for event handlers.
+        It iterates through all items and allows the processor to modify them.
+
+        Parameters
+        ----------
+        processor : Callable[[Any, int], int]
+            Function that processes an item and returns count of changes made.
+            Signature: processor(item, item_index) -> int
+
+        Returns
+        -------
+        int
+            Total count of changes made by processor across all items
+        """
+        total_changes = 0
+
+        try:
+            for idx, item in enumerate(self._cache):
+                try:
+                    changes = processor(item, idx)
+                    total_changes += changes
+                except Exception:
+                    if self._logger:
+                        self._logger.error(f"Error processing cache item #{idx}:")
+                    traceback.print_exc()
+
+            if self._logger:
+                self._logger.debug(
+                    f"Cache process: processed {len(self._cache)} items"
+                )
+
+        except Exception:
+            if self._logger:
+                self._logger.error("Error in process_all_items:")
+            traceback.print_exc()
+
+        return total_changes

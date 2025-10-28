@@ -13,7 +13,6 @@ from megatron.core import parallel_state as mpu
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from areal.api.cli_args import InferenceEngineConfig
-from areal.api.workflow_api import RolloutWorkflow
 from areal.core.async_task_runner import AsyncTaskRunner, TaskQueueFullError
 from areal.core.staleness_manager import StalenessManager
 from areal.experimental.openai.types import CompletionWithTokenLogpReward
@@ -22,6 +21,7 @@ from areal.utils.data import concat_padded_tensors, cycle_dataloader
 
 if TYPE_CHECKING:
     from areal.api.engine_api import InferenceEngine
+    from areal.api.workflow_api import RolloutWorkflow
 
 
 def check_trajectory_format(

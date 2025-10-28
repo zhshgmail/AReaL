@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, List
 import torch
 from tensordict import TensorDict
 
-from areal.core.event_system import EventContext, EventHandler, EventType
+from areal.api.event_api import EventContext, EventHandler, EventType
 
 if TYPE_CHECKING:
     from areal.api.engine_api import InferenceEngine

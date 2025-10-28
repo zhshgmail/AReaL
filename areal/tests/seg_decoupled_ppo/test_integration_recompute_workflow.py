@@ -22,7 +22,8 @@ sys.modules['megatron'] = MagicMock()
 sys.modules['megatron.core'] = MagicMock()
 sys.modules['megatron.core.parallel_state'] = MagicMock()
 
-from areal.api.workflow_api import RECOMPUTE_VERSION_KEY, WorkflowExecutor
+from areal.api.workflow_api import RECOMPUTE_VERSION_KEY
+from areal.core import WorkflowExecutor
 
 
 class InferenceEngineConfig:

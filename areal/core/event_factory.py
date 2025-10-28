@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from areal.api.event_api import EventContext, EventType
 from areal.core.async_task_runner import AsyncTaskRunner
-from areal.core.event_system import EventContext, EventRegistry, EventType
+from areal.core.event_system import EventRegistry
 from areal.core.filters import StalenessFilter
-from areal.core.handlers import ProximalRecomputer
+from areal.core.handlers.cache_proximal_recomputer import CacheProximalRecomputer
+from areal.core.handlers.event_propagator import EventPropagator
+from areal.core.handlers.queue_proximal_recomputer import QueueProximalRecomputer
 from areal.core.local_cache import LocalCache
 from areal.core.local_queue import LocalQueue
 from areal.core.staleness_manager import StalenessManager
@@ -34,10 +37,19 @@ def create_workflow_executor_with_events(
 
     **Segment-wise PPO mode** (``enable_segment_wise_ppo=True``):
         - Filter: StalenessFilter (rejects over-stale samples at admission)
-        - Handler: ProximalRecomputer (recomputes proximal_t on BEFORE_POLICY_UPDATE)
+        - Handlers: QueueProximalRecomputer and CacheProximalRecomputer
+          (recompute proximal_t on BEFORE_POLICY_UPDATE)
+        - Propagator: EventPropagator (distributes global events to queue/cache)
 
     **Standard PPO mode** (``enable_segment_wise_ppo=False``):
         - No filters or handlers (backward compatible)
+
+    Architecture:
+        1. EventRegistry fires global event (BEFORE_POLICY_UPDATE)
+        2. EventPropagator receives event and calls queue.on_event() and cache.on_event()
+        3. LocalQueue/LocalCache create QueueEventContext/CacheEventContext with metadata
+        4. Queue/Cache-specific handlers (QueueProximalRecomputer, CacheProximalRecomputer)
+           receive events and process items without accessing internal structures
 
     Parameters
     ----------
@@ -60,17 +72,17 @@ def create_workflow_executor_with_events(
     >>> executor, registry = create_workflow_executor_with_events(config, engine)
     >>>
     >>> # Fire event before policy update
-    >>> context = EventContext(
-    ...     EventType.BEFORE_POLICY_UPDATE, engine, config, logger,
-    ...     data={'queue': queue, 'cache': cache}
-    ... )
-    >>> registry.fire_event(context)  # ProximalRecomputer runs
+    >>> context = EventContext(EventType.BEFORE_POLICY_UPDATE, engine, config, logger)
+    >>> registry.fire_event(context)  # Propagates to queue/cache handlers
 
     See Also
     --------
-    EventRegistry : Manages event handlers
-    QueueFilter : Protocol for admission control
-    EventHandler : Protocol for event handling
+    EventRegistry : Manages global event handlers
+    EventPropagator : Propagates events to queue/cache
+    QueueProximalRecomputer : Queue-specific recomputation handler
+    CacheProximalRecomputer : Cache-specific recomputation handler
+    Filter : Protocol for admission control
+    EventHandler : Protocol for global event handling
     """
     enable_sdp = getattr(config, "enable_segment_wise_ppo", False)
 
@@ -94,9 +106,20 @@ def create_workflow_executor_with_events(
             logger=None,  # Will be updated during initialize
         )
 
-        # 2. Create LocalQueue and LocalCache (concrete implementations of QueueAPI/CacheAPI)
-        output_queue = LocalQueue(maxsize=qsize, filter_context=filter_context)
-        result_cache = LocalCache(filter_context=filter_context)
+        # 2. Create LocalQueue and LocalCache with engine, config, logger for event support
+        output_queue = LocalQueue(
+            maxsize=qsize,
+            filter_context=filter_context,
+            engine=inference_engine,
+            config=config,
+            logger=None,  # Will be set during initialize
+        )
+        result_cache = LocalCache(
+            filter_context=filter_context,
+            engine=inference_engine,
+            config=config,
+            logger=None,  # Will be set during initialize
+        )
 
         # 3. Create filter
         staleness_filter = StalenessFilter(
@@ -107,7 +130,21 @@ def create_workflow_executor_with_events(
         output_queue.register_filter(staleness_filter)
         result_cache.register_filter(staleness_filter)
 
-        # 5. Create AsyncTaskRunner with FilterableQueue and FilterableCache
+        # 5. Create queue-specific and cache-specific event handlers
+        queue_recomputer = QueueProximalRecomputer()
+        cache_recomputer = CacheProximalRecomputer()
+
+        # 6. Register event handlers ON Queue and Cache
+        output_queue.register_event_handler(queue_recomputer)
+        result_cache.register_event_handler(cache_recomputer)
+
+        # 7. Create EventPropagator for global event propagation
+        event_propagator = EventPropagator(output_queue, result_cache)
+
+        # 8. Register EventPropagator in global EventRegistry
+        registry.register_handler(EventType.BEFORE_POLICY_UPDATE, event_propagator)
+
+        # 9. Create AsyncTaskRunner with LocalQueue and LocalCache
         runner = AsyncTaskRunner(
             max_queue_size=qsize,
             enable_tracing=config.enable_rollout_tracing,
@@ -115,7 +152,7 @@ def create_workflow_executor_with_events(
             result_cache=result_cache,
         )
 
-        # 6. Create WorkflowExecutor with configured runner
+        # 10. Create WorkflowExecutor with configured runner
         executor = WorkflowExecutor(
             config=config,
             inference_engine=inference_engine,
@@ -123,18 +160,7 @@ def create_workflow_executor_with_events(
             runner=runner,  # Pass configured runner
         )
 
-        # 7. Store filter context for later use (will be updated with logger in initialize())
-        executor._filter_context = filter_context
-
-        # 8. Create event handler for policy updates
-        proximal_recomputer = ProximalRecomputer()
-
-        # 9. Register event handler
-        registry.register_handler(
-            EventType.BEFORE_POLICY_UPDATE, proximal_recomputer
-        )
-
-        # 10. Connect engine with event registry so it can fire events
+        # 11. Connect engine with event registry so it can fire events
         inference_engine.event_registry = registry
 
     else:

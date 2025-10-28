@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import os
 import random
@@ -8,7 +10,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import datetime
 from threading import Lock
-from typing import Any, List, Protocol
+from typing import TYPE_CHECKING, Any, List, Protocol
 
 import aiohttp
 import requests
@@ -26,13 +28,15 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
     WeightUpdateRequests,
 )
-from areal.api.workflow_api import RolloutWorkflow
 from areal.platforms import current_platform
 from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
 from areal.utils.launcher import wait_llm_server_addrs
 
 from .workflow_factory import create_workflow_executor
+
+if TYPE_CHECKING:
+    from areal.api.workflow_api import RolloutWorkflow
 
 RID_CACHE_SIZE = 128
 

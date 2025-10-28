@@ -2,7 +2,10 @@ from __future__ import annotations  # noqa
 
 from typing import TYPE_CHECKING, Any, Dict
 
-from areal.core.handlers import RECOMPUTE_VERSION_KEY, ensure_recompute_key
+from areal.core.handlers.proximal_recompute_logic import (
+    RECOMPUTE_VERSION_KEY,
+    ensure_recompute_key,
+)
 from areal.experimental.openai.types import CompletionWithTokenLogpReward
 
 if TYPE_CHECKING:

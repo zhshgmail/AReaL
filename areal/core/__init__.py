@@ -1,13 +1,10 @@
 """Core components for AREAL."""
 
+from areal.api.event_api import EventContext, EventHandler, EventType
+from areal.api.filter_api import Filter
+
 from .event_factory import create_workflow_executor_with_events
-from .event_system import (
-    EventContext,
-    EventHandler,
-    EventRegistry,
-    EventType,
-    QueueFilter,
-)
+from .event_system import EventRegistry
 from .filters import StalenessFilter
 from .handlers import (
     RECOMPUTE_VERSION_KEY,
@@ -37,7 +34,7 @@ __all__ = [
     "EventType",
     "EventContext",
     "EventRegistry",
-    "QueueFilter",
+    "Filter",  # Renamed from QueueFilter
     "EventHandler",
     # Filters and handlers
     "StalenessFilter",
