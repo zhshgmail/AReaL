@@ -8,7 +8,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import datetime
 from threading import Lock
-from typing import Any, Protocol
+from typing import Any, List, Protocol
 
 import aiohttp
 import requests
