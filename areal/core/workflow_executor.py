@@ -254,6 +254,7 @@ class WorkflowExecutor:
         config: InferenceEngineConfig,
         inference_engine: InferenceEngine,
         staleness_manager: StalenessManager | None = None,
+        runner: AsyncTaskRunner | None = None,
     ):
         self.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
@@ -267,12 +268,16 @@ class WorkflowExecutor:
         # The manager will be properly initialized in initialize()
         self.staleness_manager = staleness_manager
 
-        # Create the generic async task runner
-        qsize = config.queue_size or self.max_concurrent_rollouts * 16
-        self.runner = AsyncTaskRunner[dict[str, Any] | None](
-            max_queue_size=qsize,
-            enable_tracing=config.enable_rollout_tracing,
-        )
+        # Use provided runner or create default
+        if runner is not None:
+            self.runner = runner
+        else:
+            # Create default async task runner
+            qsize = config.queue_size or self.max_concurrent_rollouts * 16
+            self.runner = AsyncTaskRunner[dict[str, Any] | None](
+                max_queue_size=qsize,
+                enable_tracing=config.enable_rollout_tracing,
+            )
 
         # For trajectory format checking
         self._expected_trajectory_keys: set | None = None
@@ -322,27 +327,9 @@ class WorkflowExecutor:
                 max_staleness=self.config.max_head_offpolicyness,
             )
 
-        # Initialize filter context for add filters (used by AsyncTaskRunner)
-        # This needs to be done before runner.initialize() so filters can access it
-        if hasattr(self, "_staleness_filter") and self._staleness_filter:
-            from areal.core.event_system import EventContext, EventType
-
-            # Create filter context (event type doesn't matter for admission control)
-            filter_context = EventContext(
-                event_type=EventType.BEFORE_PAUSE,  # Placeholder, not used by filters
-                engine=self.inference_engine,
-                config=self.config,
-                logger=logger,
-            )
-
-            # Configure runner with filter and context
-            self.runner.set_filter_context(filter_context)
-            self.runner.register_add_filter(self._staleness_filter)
-
-            logger.debug(
-                f"Registered filter {type(self._staleness_filter).__name__} "
-                "for output queue admission control"
-            )
+        # Update filter context with logger if it exists
+        if hasattr(self, "_filter_context") and self._filter_context:
+            self._filter_context.logger = logger
 
         # Initialize the generic async task runner
         self.runner.initialize(logger=logger)

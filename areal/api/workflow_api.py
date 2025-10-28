@@ -2,10 +2,17 @@ from __future__ import annotations  # noqa
 
 from typing import TYPE_CHECKING, Any, Dict
 
+from areal.core.handlers import RECOMPUTE_VERSION_KEY, ensure_recompute_key
 from areal.experimental.openai.types import CompletionWithTokenLogpReward
 
 if TYPE_CHECKING:
     from areal.api.engine_api import InferenceEngine
+
+__all__ = [
+    "RolloutWorkflow",
+    "RECOMPUTE_VERSION_KEY",
+    "ensure_recompute_key",
+]
 
 
 class RolloutWorkflow:

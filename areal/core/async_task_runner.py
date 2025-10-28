@@ -151,6 +151,8 @@ class AsyncTaskRunner(Generic[T]):
         poll_wait_time: float = DEFAULT_POLL_WAIT_TIME,
         poll_sleep_time: float = DEFAULT_POLL_SLEEP_TIME,
         enable_tracing: bool = False,
+        output_queue: Any | None = None,
+        result_cache: Any | None = None,
     ):
         """Initialize the AsyncTaskRunner.
 
@@ -166,6 +168,12 @@ class AsyncTaskRunner(Generic[T]):
             Default is 1.0.
         enable_tracing : bool, optional
             Enable detailed logging. Default is False.
+        output_queue : Any | None, optional
+            Optional output queue (could be FilterableQueue or plain queue.Queue).
+            If None, creates a plain queue.Queue. Default is None.
+        result_cache : Any | None, optional
+            Optional result cache (could be FilterableCache or plain list).
+            If None, creates a plain list. Default is None.
         """
         self.max_queue_size = max_queue_size
         self.poll_wait_time = poll_wait_time
@@ -180,48 +188,28 @@ class AsyncTaskRunner(Generic[T]):
         self.input_queue: queue.Queue[_TaskInput[T]] = queue.Queue(
             maxsize=max_queue_size
         )
-        self.output_queue: queue.Queue[_TimedResult[T]] = queue.Queue(
-            maxsize=max_queue_size
-        )
 
-        # Cache for results to support wait() with arbitrary counts
-        self.result_cache: list[_TimedResult[T]] = []
+        # Use provided output_queue or create default
+        if output_queue is not None:
+            self.output_queue = output_queue
+        else:
+            self.output_queue: queue.Queue[_TimedResult[T]] = queue.Queue(
+                maxsize=max_queue_size
+            )
+
+        # Use provided result_cache or create default
+        if result_cache is not None:
+            self.result_cache = result_cache
+        else:
+            self.result_cache: list[_TimedResult[T]] = []
 
         # Thread exception handling
         self._thread_exception_lock = threading.Lock()
         self._thread_exception: Exception | None = None
 
-        # Filter support for admission control
-        self.add_filters: list = []
-        self.filter_context: Any = None
-
         # Will be set in initialize()
         self.logger = None
         self.thread: threading.Thread | None = None
-
-    def register_add_filter(self, filter_obj) -> None:
-        """Register a filter for admission control.
-
-        Filters are checked when items are added to the output queue.
-        If any filter rejects an item (returns False from should_accept),
-        the item will not be added to the output queue.
-
-        Parameters
-        ----------
-        filter_obj : QueueFilter
-            Filter implementing should_accept(item, context) -> bool
-        """
-        self.add_filters.append(filter_obj)
-
-    def set_filter_context(self, context: Any) -> None:
-        """Set the context passed to filters during should_accept checks.
-
-        Parameters
-        ----------
-        context : Any
-            Context object (typically EventContext) passed to filters
-        """
-        self.filter_context = context
 
     def initialize(self, logger=None):
         """Initialize and start the background thread.
@@ -361,39 +349,15 @@ class AsyncTaskRunner(Generic[T]):
                         result = None
 
                     try:
-                        # Check add filters before putting to output queue
-                        should_add = True
-                        if result is not None and self.add_filters and self.filter_context:
-                            for filter_obj in self.add_filters:
-                                try:
-                                    if not filter_obj.should_accept(result, self.filter_context):
-                                        should_add = False
-                                        if self.logger:
-                                            self.logger.debug(
-                                                f"Task {tid} result rejected by filter "
-                                                f"{type(filter_obj).__name__}"
-                                            )
-                                        break
-                                except Exception as e:
-                                    if self.logger:
-                                        self.logger.error(
-                                            f"Error in filter {type(filter_obj).__name__}: {e}",
-                                            exc_info=True,
-                                        )
-                                    # On filter error, reject the item for safety
-                                    should_add = False
-                                    break
-
-                        # Place result in output queue if not rejected
-                        if should_add:
-                            self.output_queue.put_nowait(
-                                _TimedResult(create_time=task_obj.create_time, data=result)
+                        # Place result in output queue
+                        self.output_queue.put_nowait(
+                            _TimedResult(create_time=task_obj.create_time, data=result)
+                        )
+                        if self.enable_tracing and self.logger:
+                            self.logger.info(
+                                f"AsyncTaskRunner: Completed task {tid}. "
+                                f"Running: {len(running_tasks)}"
                             )
-                            if self.enable_tracing and self.logger:
-                                self.logger.info(
-                                    f"AsyncTaskRunner: Completed task {tid}. "
-                                    f"Running: {len(running_tasks)}"
-                                )
                     except queue.Full:
                         # This is a critical error that should stop the runner.
                         # Re-add task so it can be cancelled in finally.

@@ -1,14 +1,18 @@
 """Factory for creating WorkflowExecutor with event-driven architecture.
 
-This factory configures filters and event handlers based on feature flags,
-providing clean extension points without modifying core workflow logic.
+This factory is the centralized configuration (Spring @Configuration equivalent)
+that assembles all components: Queue, Cache, Filters, Event Handlers, and
+wires them together based on feature flags.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from areal.core.event_system import EventRegistry, EventType
+from areal.core.async_task_runner import AsyncTaskRunner
+from areal.core.event_system import EventContext, EventRegistry, EventType
+from areal.core.filterable_cache import FilterableCache
+from areal.core.filterable_queue import FilterableQueue
 from areal.core.filters import StalenessFilter
 from areal.core.handlers import ProximalRecomputer
 from areal.core.staleness_manager import StalenessManager
@@ -73,49 +77,76 @@ def create_workflow_executor_with_events(
     # Create event registry
     registry = EventRegistry()
 
-    # Create workflow executor
-    executor = WorkflowExecutor(
-        config=config,
-        inference_engine=inference_engine,
-        staleness_manager=staleness_manager,
-    )
+    # Determine queue size
+    max_concurrent_rollouts = config.max_concurrent_rollouts or config.consumer_batch_size
+    qsize = config.queue_size or max_concurrent_rollouts * 16
 
     if enable_sdp:
         # Segment-wise decoupled PPO mode
+        # This is the Spring @Configuration - assemble all components here
 
-        # Create filter for admission control
+        # 1. Create filter context (needed by filters)
+        # Logger will be set during WorkflowExecutor.initialize()
+        filter_context = EventContext(
+            event_type=EventType.BEFORE_PAUSE,  # Placeholder
+            engine=inference_engine,
+            config=config,
+            logger=None,  # Will be updated during initialize
+        )
+
+        # 2. Create FilterableQueue and FilterableCache with context
+        output_queue = FilterableQueue(maxsize=qsize, filter_context=filter_context)
+        result_cache = FilterableCache(filter_context=filter_context)
+
+        # 3. Create filter
         staleness_filter = StalenessFilter(
             max_staleness=config.max_head_offpolicyness
         )
 
-        # Create handler for policy update events
+        # 4. Register filters ON Queue and Cache
+        output_queue.register_filter(staleness_filter)
+        result_cache.register_filter(staleness_filter)
+
+        # 5. Create AsyncTaskRunner with FilterableQueue and FilterableCache
+        runner = AsyncTaskRunner(
+            max_queue_size=qsize,
+            enable_tracing=config.enable_rollout_tracing,
+            output_queue=output_queue,
+            result_cache=result_cache,
+        )
+
+        # 6. Create WorkflowExecutor with configured runner
+        executor = WorkflowExecutor(
+            config=config,
+            inference_engine=inference_engine,
+            staleness_manager=staleness_manager,
+            runner=runner,  # Pass configured runner
+        )
+
+        # 7. Store filter context for later use (will be updated with logger in initialize())
+        executor._filter_context = filter_context
+
+        # 8. Create event handler for policy updates
         proximal_recomputer = ProximalRecomputer()
 
-        # Register handler
+        # 9. Register event handler
         registry.register_handler(
             EventType.BEFORE_POLICY_UPDATE, proximal_recomputer
         )
 
-        # Store filter and registry on executor for access
-        executor._staleness_filter = staleness_filter
-        executor._event_registry = registry
-
-        # Connect engine with event registry so it can fire events
+        # 10. Connect engine with event registry so it can fire events
         inference_engine.event_registry = registry
 
-        # Log configuration
-        if hasattr(executor, "logger") and executor.logger:
-            executor.logger.debug(
-                "Configured for segment-wise PPO: "
-                "StalenessFilter + ProximalRecomputer on BEFORE_POLICY_UPDATE"
-            )
     else:
         # Standard PPO mode - no filters or handlers
-        executor._staleness_filter = None
-        executor._event_registry = registry
-        inference_engine.event_registry = None
+        # Just create plain executor with default queue/cache
 
-        if hasattr(executor, "logger") and executor.logger:
-            executor.logger.debug("Configured for standard PPO (no filters/handlers)")
+        executor = WorkflowExecutor(
+            config=config,
+            inference_engine=inference_engine,
+            staleness_manager=staleness_manager,
+        )
+
+        inference_engine.event_registry = None
 
     return executor, registry
