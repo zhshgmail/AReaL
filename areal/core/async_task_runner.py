@@ -8,6 +8,8 @@ The AsyncTaskRunner manages a background thread running an asyncio event loop (u
 that processes tasks from an input queue and places results in an output queue.
 """
 
+from __future__ import annotations
+
 import asyncio
 import queue
 import random
@@ -15,9 +17,13 @@ import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 import uvloop
+
+if TYPE_CHECKING:
+    from areal.api.cache_api import CacheAPI
+    from areal.api.queue_api import QueueAPI
 
 # Type variable for generic result types
 T = TypeVar("T")
@@ -148,18 +154,24 @@ class AsyncTaskRunner(Generic[T]):
     def __init__(
         self,
         max_queue_size: int,
+        output_queue: QueueAPI,
+        result_cache: CacheAPI,
         poll_wait_time: float = DEFAULT_POLL_WAIT_TIME,
         poll_sleep_time: float = DEFAULT_POLL_SLEEP_TIME,
         enable_tracing: bool = False,
-        output_queue: Any | None = None,
-        result_cache: Any | None = None,
     ):
         """Initialize the AsyncTaskRunner.
 
         Parameters
         ----------
         max_queue_size : int
-            Maximum size for input and output queues.
+            Maximum size for input queue (output_queue size is managed by QueueAPI).
+        output_queue : QueueAPI
+            Output queue implementing QueueAPI protocol (e.g., LocalQueue, ZeroMQQueue).
+            REQUIRED - must be provided by factory.
+        result_cache : CacheAPI
+            Result cache implementing CacheAPI protocol (e.g., LocalCache, RedisCache).
+            REQUIRED - must be provided by factory.
         poll_wait_time : float, optional
             Time in seconds to wait for task completion during polling.
             Default is 0.05.
@@ -168,12 +180,12 @@ class AsyncTaskRunner(Generic[T]):
             Default is 1.0.
         enable_tracing : bool, optional
             Enable detailed logging. Default is False.
-        output_queue : Any | None, optional
-            Optional output queue (could be FilterableQueue or plain queue.Queue).
-            If None, creates a plain queue.Queue. Default is None.
-        result_cache : Any | None, optional
-            Optional result cache (could be FilterableCache or plain list).
-            If None, creates a plain list. Default is None.
+
+        Notes
+        -----
+        The output_queue and result_cache must be provided by the factory
+        (e.g., event_factory.create_workflow_executor_with_events) with
+        proper filters and event handlers configured.
         """
         self.max_queue_size = max_queue_size
         self.poll_wait_time = poll_wait_time
@@ -189,19 +201,10 @@ class AsyncTaskRunner(Generic[T]):
             maxsize=max_queue_size
         )
 
-        # Use provided output_queue or create default
-        if output_queue is not None:
-            self.output_queue = output_queue
-        else:
-            self.output_queue: queue.Queue[_TimedResult[T]] = queue.Queue(
-                maxsize=max_queue_size
-            )
-
-        # Use provided result_cache or create default
-        if result_cache is not None:
-            self.result_cache = result_cache
-        else:
-            self.result_cache: list[_TimedResult[T]] = []
+        # REQUIRED: Use provided QueueAPI and CacheAPI instances
+        # Factory is responsible for creating and configuring these
+        self.output_queue: QueueAPI = output_queue
+        self.result_cache: CacheAPI = result_cache
 
         # Thread exception handling
         self._thread_exception_lock = threading.Lock()

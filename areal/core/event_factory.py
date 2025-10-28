@@ -145,11 +145,12 @@ def create_workflow_executor_with_events(
         registry.register_handler(EventType.BEFORE_POLICY_UPDATE, event_propagator)
 
         # 9. Create AsyncTaskRunner with LocalQueue and LocalCache
+        # AsyncTaskRunner now REQUIRES QueueAPI and CacheAPI (no defaults)
         runner = AsyncTaskRunner(
             max_queue_size=qsize,
-            enable_tracing=config.enable_rollout_tracing,
             output_queue=output_queue,
             result_cache=result_cache,
+            enable_tracing=config.enable_rollout_tracing,
         )
 
         # 10. Create WorkflowExecutor with configured runner
