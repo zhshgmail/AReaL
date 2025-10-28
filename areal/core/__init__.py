@@ -16,6 +16,7 @@ from .workflow_executor import (
     WorkflowExecutor,
     check_trajectory_format,
 )
+from .workflow_factory import create_workflow_executor
 
 __all__ = [
     "RemoteInfBackendProtocol",
@@ -23,6 +24,7 @@ __all__ = [
     "StalenessManager",
     "WorkflowExecutor",
     "check_trajectory_format",
+    "create_workflow_executor",
     "QueueTransformer",
     "TransformerContext",
     "ProximalRecomputer",

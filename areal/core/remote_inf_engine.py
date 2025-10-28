@@ -32,7 +32,7 @@ from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
 from areal.utils.launcher import wait_llm_server_addrs
 
-from .workflow_executor import WorkflowExecutor
+from .workflow_factory import create_workflow_executor
 
 RID_CACHE_SIZE = 128
 
@@ -313,7 +313,7 @@ class RemoteInfEngine:
         self.logger.info("Servers are all ready!")
         self.executor = ProcessPoolExecutor(max_workers=1)
 
-        self.workflow_executor = WorkflowExecutor(
+        self.workflow_executor = create_workflow_executor(
             config=self.config,
             inference_engine=self,
         )
