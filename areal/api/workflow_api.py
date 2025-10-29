@@ -617,7 +617,17 @@ class WorkflowExecutor:
         if self.config.enable_rollout_tracing:
             self.logger.info(f"Rollout results are ready!")
 
-        # Step 5: Take samples from cache
+        # Step 5: Recompute proximal logprobs for v-1 samples (segment-wise PPO)
+        # This must happen BEFORE weight updates, while inference engine is still at v-1
+        if self.proximal_recomputer is not None:
+            # Only recompute if we've advanced to a new version
+            if current_ver > 0:  # Skip recomputation at version 0 (first step)
+                self.proximal_recomputer.recompute_all(
+                    output_queue=self.output_queue,
+                    result_cache=self.result_cache,
+                )
+            
+        # Step 6: Take samples from cache
         results = self.result_cache.take_first_n(count)
         # Sort and shuffle
         results.sort(key=lambda x: x.t)

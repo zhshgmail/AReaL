@@ -132,9 +132,9 @@ class ProximalRecomputer:
         try:
             if hasattr(self.inference_engine, "recompute_output_logprobs_sync"):
                 # Use cache.get_all() to iterate over samples
-                for idx, td in enumerate(result_cache.get_all()):
+                for idx, timed_result in enumerate(result_cache.get_all()):
                     patched = self._recompute_sample_proximal_t(
-                        td, current_ver, f"cache#{idx}"
+                        timed_result.data, current_ver, f"cache#{idx}"
                     )
                     total_patched += patched
         except Exception:
@@ -177,10 +177,10 @@ class ProximalRecomputer:
                     break  # Queue empty, done
 
                 # Process samples (no lock needed - working on local list)
-                for idx, td in enumerate(temp_samples):
+                for idx, timed_result in enumerate(temp_samples):
                     try:
                         patched = self._recompute_sample_proximal_t(
-                            td, current_ver, f"queue#{idx}"
+                            timed_result.data, current_ver, f"queue#{idx}"
                         )
                         total_patched += patched
                     except Exception:
@@ -315,7 +315,7 @@ class ProximalRecomputer:
             patched_value = torch.full_like(
                 versions[:, :1], int(current_ver), dtype=torch.int64
             )
-            td.set(RECOMPUTE_VERSION_KEY, patched_value)
+            td[RECOMPUTE_VERSION_KEY] = patched_value
             return patched_here
         except Exception:
             traceback.print_exc()

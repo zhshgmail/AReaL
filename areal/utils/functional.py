@@ -218,6 +218,44 @@ def ppo_actor_loss_fn(
     behav_logprobs = proximal_logprobs_t if proximal_logprobs_t is not None else proximal_logprobs
     behav_kl = behav_logprobs - old_logprobs
     behav_imp_weight = behav_kl.exp()
+    # DEBUG: Find and log outlier tokens with very low importance weights
+    import logging
+    logger = logging.getLogger("areal.utils.functional")
+
+    valid_mask = loss_mask.bool()
+    valid_weights = behav_imp_weight[valid_mask]
+    valid_kls = behav_kl[valid_mask]
+
+    if len(valid_weights) > 0:
+        min_weight = valid_weights.min().item()
+        if min_weight < 0.01:  # Log if we have very low weights
+            # Find the token with minimum weight
+            min_idx = valid_weights.argmin()
+            min_kl = valid_kls[min_idx].item()
+
+            # Get the actual position in the original tensor
+            valid_positions = torch.where(valid_mask)
+            batch_idx = valid_positions[0][min_idx].item() if len(valid_positions[0].shape) > 0 else 0
+            seq_idx = valid_positions[-1][min_idx].item()
+
+            # Get more context about this position
+            if proximal_logprobs_t is not None:
+                prox_t_val = proximal_logprobs_t[valid_mask][min_idx].item()
+                logger.warning(f"[OUTLIER_DETAIL] proximal_logprobs_t={prox_t_val:.6f}")
+
+            # Check if near padding or sequence boundary
+            if hasattr(loss_mask, 'shape') and len(loss_mask.shape) > 1:
+                seq_len = loss_mask[batch_idx].sum().item()
+                logger.warning(f"[OUTLIER_DETAIL] seq_length={seq_len}, pos_in_seq={seq_idx}")
+
+            old_logp_val = old_logprobs[valid_mask][min_idx].item()
+            behav_logp_val = behav_logprobs[valid_mask][min_idx].item()
+
+            logger.warning(
+                f"[OUTLIER] min_imp_weight={min_weight:.8f}, kl={min_kl:.6f}, "
+                f"pos=({batch_idx},{seq_idx}), old_logp={old_logp_val:.6f}, "
+                f"behav_logp={behav_logp_val:.6f}"
+            )
 
     # Apply both upper and lower bound filtering
     behav_mask = loss_mask

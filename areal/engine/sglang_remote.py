@@ -380,7 +380,7 @@ class RemoteSGLangEngine(InferenceEngine):
 
         return fut
 
-    def update_weights_from_disk(self, meta: WeightUpdateMeta) -> Future[None]:
+    def D(self, meta: WeightUpdateMeta) -> Future[None]:
         assert meta.type == "disk"
 
         tik = time.perf_counter()
@@ -530,11 +530,11 @@ class RemoteSGLangEngine(InferenceEngine):
             "input_ids": input_ids,
             "sampling_params": {
                 "temperature": 0.0,  # Greedy sampling for deterministic logprobs
-                "max_new_tokens": 1,  # We only need logprobs, not generation
+                "max_new_tokens": 0,  # We only need logprobs, not generation
             },
             "return_logprob": True,
             "stream": False,
-            "logprob_start_len": start_index + 1,  # SGLang parameter for logprob computation
+            "logprob_start_len": max(0, int(start_index)),  # SGLang parameter for logprob computation
         }
 
         try:
@@ -549,10 +549,11 @@ class RemoteSGLangEngine(InferenceEngine):
             # Extract logprobs from response
             meta_info = result.get("meta_info", {})
             input_token_logprobs = meta_info.get("input_token_logprobs", [])
+            ilp = [x[0] for x in input_token_logprobs]
 
             # Return logprobs for tokens after start_index
             # input_token_logprobs[i] is the logprob of input_ids[i+1] given input_ids[:i+1]
-            return input_token_logprobs[start_index:]
+            return ilp[1:]
         except Exception as e:
             self.logger.error(f"Failed to recompute logprobs: {e}")
             raise
