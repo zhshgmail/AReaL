@@ -1,4 +1,4 @@
-"""Queue event handler protocol.
+"""Queue event handler base class.
 
 This module defines the interface for handling events within Queue implementations.
 Queue-specific event handlers are registered ON the queue, not in the global
@@ -7,48 +7,71 @@ EventRegistry, maintaining encapsulation of queue internals.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+import abc
+from typing import Any
+
+from areal.api.cli_args import InferenceEngineConfig
+from areal.api.engine_api import InferenceEngine
+from areal.api.event_api import EventContext, EventType
 
 
-class QueueEventContext:
+class QueueEventContext(EventContext):
     """Context for queue-specific events.
 
-    This context is created by the Queue implementation and passed to
-    queue event handlers. It does NOT expose the queue's internal structure
-    (e.g., queue.Queue), only the information handlers need.
+    This context extends EventContext with queue-specific metadata.
+    It is created by the Queue implementation and passed to queue event handlers.
+    It does NOT expose the queue's internal structure (e.g., queue.Queue),
+    only the information handlers need.
 
     Attributes
     ----------
-    event_type : Any
-        Type of event (e.g., PRE_UPDATE, POST_UPDATE)
-    engine : Any
+    event_type : EventType
+        Type of event (e.g., BEFORE_POLICY_UPDATE)
+    engine : InferenceEngine
         Inference engine reference
-    config : Any
+    config : InferenceEngineConfig
         Configuration object
     logger : Any
         Logger instance
-    queue_metadata : dict
-        Queue-specific metadata (size, items count, etc.)
+    data : dict[str, Any]
+        Event-specific data (inherited from EventContext)
+    queue_metadata : dict[str, Any]
+        Queue-specific metadata (size, empty, full status, process_items function)
         Does NOT include direct queue access
     """
 
     def __init__(
         self,
-        event_type: Any,
-        engine: Any,
-        config: Any,
+        event_type: EventType,
+        engine: InferenceEngine,
+        config: InferenceEngineConfig,
         logger: Any,
         queue_metadata: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
     ):
-        self.event_type = event_type
-        self.engine = engine
-        self.config = config
-        self.logger = logger
+        """Initialize queue event context.
+
+        Parameters
+        ----------
+        event_type : EventType
+            Type of event
+        engine : InferenceEngine
+            Inference engine reference
+        config : InferenceEngineConfig
+            Configuration object
+        logger : Any
+            Logger instance
+        queue_metadata : dict[str, Any] | None, optional
+            Queue-specific metadata. Default is None.
+        data : dict[str, Any] | None, optional
+            Event-specific data. Default is None.
+        """
+        super().__init__(event_type, engine, config, logger, data)
         self.queue_metadata = queue_metadata or {}
 
 
-class QueueEventHandler(Protocol):
-    """Protocol for handlers of queue-specific events.
+class QueueEventHandler(abc.ABC):
+    """Abstract base class for handlers of queue-specific events.
 
     Queue event handlers are registered ON the queue implementation itself,
     not in the global EventRegistry. This maintains encapsulation - handlers
@@ -57,7 +80,7 @@ class QueueEventHandler(Protocol):
 
     Examples
     --------
-    >>> class QueueProximalRecomputer:
+    >>> class QueueProximalRecomputer(QueueEventHandler):
     ...     def on_queue_event(self, context: QueueEventContext):
     ...         # Work with context metadata, not direct queue access
     ...         if context.event_type == EventType.PRE_UPDATE:
@@ -66,6 +89,7 @@ class QueueEventHandler(Protocol):
     ...                 self.recompute(item)
     """
 
+    @abc.abstractmethod
     def on_queue_event(self, context: QueueEventContext) -> None:
         """Handle queue-specific event.
 
@@ -74,4 +98,4 @@ class QueueEventHandler(Protocol):
         context : QueueEventContext
             Queue event context with metadata, not direct queue access
         """
-        ...
+        pass

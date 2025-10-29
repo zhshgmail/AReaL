@@ -238,12 +238,22 @@ class WorkflowExecutor:
         concurrency limits, and validation settings.
     inference_engine : InferenceEngine
         The inference engine to use for generating completions.
+    runner : AsyncTaskRunner
+        REQUIRED - The async task runner instance. Must be provided by factory.
+        This follows dependency injection principle - WorkflowExecutor doesn't
+        know about concrete Queue/Cache implementations.
     staleness_manager : StalenessManager | None, optional
         Manager for staleness-aware capacity control. If None, a default manager
         will be created during initialization. Default is None.
 
+    Notes
+    -----
+    WorkflowExecutor should always be created via workflow_factory, which
+    handles proper dependency injection following Spring @Configuration pattern.
+
     See Also
     --------
+    workflow_factory : Factory for creating WorkflowExecutor with proper DI
     AsyncTaskRunner : Generic async task executor used internally
     StalenessManager : Manages capacity based on staleness constraints
     RolloutWorkflow : Interface for rollout episode execution
@@ -253,9 +263,33 @@ class WorkflowExecutor:
         self,
         config: InferenceEngineConfig,
         inference_engine: InferenceEngine,
+        runner: AsyncTaskRunner,
         staleness_manager: StalenessManager | None = None,
-        runner: AsyncTaskRunner | None = None,
     ):
+        """Initialize WorkflowExecutor with dependency injection.
+
+        Parameters
+        ----------
+        config : InferenceEngineConfig
+            Configuration for the inference engine.
+        inference_engine : InferenceEngine
+            The inference engine to use for generating completions.
+        runner : AsyncTaskRunner
+            REQUIRED - The async task runner instance. Must be provided by factory.
+            This follows dependency injection principle - WorkflowExecutor doesn't
+            know about concrete Queue/Cache implementations.
+        staleness_manager : StalenessManager | None, optional
+            Manager for staleness-aware capacity control. If None, a default manager
+            will be created during initialization. Default is None.
+
+        Notes
+        -----
+        The runner parameter is REQUIRED and must be provided by the factory.
+        This ensures:
+        - WorkflowExecutor doesn't depend on concrete Queue/Cache types
+        - Factory has full control over what gets injected
+        - Clear separation of concerns (following Spring @Configuration pattern)
+        """
         self.max_concurrent_rollouts = (
             config.max_concurrent_rollouts or config.consumer_batch_size
         )
@@ -268,16 +302,8 @@ class WorkflowExecutor:
         # The manager will be properly initialized in initialize()
         self.staleness_manager = staleness_manager
 
-        # Use provided runner or create default
-        if runner is not None:
-            self.runner = runner
-        else:
-            # Create default async task runner
-            qsize = config.queue_size or self.max_concurrent_rollouts * 16
-            self.runner = AsyncTaskRunner[dict[str, Any] | None](
-                max_queue_size=qsize,
-                enable_tracing=config.enable_rollout_tracing,
-            )
+        # REQUIRED: Runner must be provided by factory (dependency injection)
+        self.runner = runner
 
         # For trajectory format checking
         self._expected_trajectory_keys: set | None = None
@@ -327,9 +353,15 @@ class WorkflowExecutor:
                 max_staleness=self.config.max_head_offpolicyness,
             )
 
-        # Update filter context with logger if it exists
-        if hasattr(self, "_filter_context") and self._filter_context:
-            self._filter_context.logger = logger
+        # Update queue and cache logger (they'll recreate their FilterContext)
+        if hasattr(self.runner.output_queue, "set_logger"):
+            self.runner.output_queue.set_logger(logger)
+        if hasattr(self.runner.result_cache, "set_logger"):
+            self.runner.result_cache.set_logger(logger)
+
+        # Update event registry logger if event system is enabled
+        if hasattr(self.inference_engine, "event_registry") and self.inference_engine.event_registry is not None:
+            self.inference_engine.event_registry.set_logger(logger)
 
         # Initialize the generic async task runner
         self.runner.initialize(logger=logger)

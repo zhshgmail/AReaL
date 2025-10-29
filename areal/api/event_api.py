@@ -3,17 +3,17 @@
 This module defines the core interfaces for the event-driven architecture:
 - EventType: Enum of system events
 - EventContext: Context passed to global event handlers
-- EventHandler: Protocol for global event handlers
+- EventHandler: Base class for global event handlers
 """
 
 from __future__ import annotations
 
+import abc
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any
 
-if TYPE_CHECKING:
-    from areal.api.cli_args import InferenceEngineConfig
-    from areal.api.engine_api import InferenceEngine
+from areal.api.cli_args import InferenceEngineConfig
+from areal.api.engine_api import InferenceEngine
 
 
 class EventType(Enum):
@@ -62,8 +62,8 @@ class EventContext:
     def __init__(
         self,
         event_type: EventType,
-        engine: "InferenceEngine",
-        config: "InferenceEngineConfig",
+        engine: InferenceEngine,
+        config: InferenceEngineConfig,
         logger: Any,
         data: dict[str, Any] | None = None,
     ):
@@ -74,18 +74,18 @@ class EventContext:
         self.data = data or {}
 
 
-class EventHandler(Protocol):
-    """Protocol for global event handlers.
+class EventHandler(abc.ABC):
+    """Abstract base class for global event handlers.
 
     Global event handlers are registered in EventRegistry and respond to
     system-wide events (PRE_UPDATE, POST_UPDATE, etc.).
 
     For queue-specific or cache-specific event handling, use QueueEventHandler
-    or CacheEventHandler protocols instead.
+    or CacheEventHandler base classes instead.
 
     Examples
     --------
-    >>> class EventPropagator:
+    >>> class EventPropagator(EventHandler):
     ...     def __init__(self, queue, cache):
     ...         self.queue = queue
     ...         self.cache = cache
@@ -96,6 +96,7 @@ class EventHandler(Protocol):
     ...         self.cache.on_event(context)
     """
 
+    @abc.abstractmethod
     def on_event(self, context: EventContext) -> None:
         """Handle global event.
 

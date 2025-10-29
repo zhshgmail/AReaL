@@ -10,13 +10,18 @@ Redis, Etcd, Memcached, etc. for distributed caches.
 from __future__ import annotations
 
 import traceback
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 
-from areal.api.cache_event_handler import CacheEventContext
+from areal.api.cache_api import CacheAPI
+from areal.api.cache_event_handler import CacheEventContext, CacheEventHandler
 from areal.api.event_api import EventContext
+from areal.api.filter_api import Filter, FilterContext
+
+# Type variable for cache items
+T = TypeVar("T")
 
 
-class LocalCache:
+class LocalCache(CacheAPI[T]):
     """Local (in-process) cache implementation with filter support.
 
     This class implements CacheAPI using list internally, with support
@@ -48,33 +53,42 @@ class LocalCache:
 
     def __init__(
         self,
-        filter_context: Any | None = None,
-        engine: Any | None = None,
         config: Any | None = None,
         logger: Any | None = None,
     ):
         """Initialize filterable cache with event support.
 
+        Cache manages its own FilterContext internally. Filters receive
+        FilterContext during admission checks, not the full EventContext.
+
         Parameters
         ----------
-        filter_context : Any | None, optional
-            Context passed to filters when checking items. Default is None.
-        engine : Any | None, optional
-            Inference engine reference. Default is None.
         config : Any | None, optional
-            Configuration object. Default is None.
+            Configuration object for FilterContext. Default is None.
         logger : Any | None, optional
-            Logger instance. Default is None.
+            Logger instance for FilterContext. Default is None.
         """
         self._cache: list[Any] = []
         self._filters: list = []
-        self._filter_context: Any = filter_context
         self._event_handlers: list = []
-        self._engine = engine
         self._config = config
         self._logger = logger
+        # Cache creates its own FilterContext
+        self._filter_context: FilterContext | None = self._create_filter_context()
 
-    def register_filter(self, filter_obj) -> None:
+    def _create_filter_context(self) -> FilterContext | None:
+        """Create FilterContext for filters.
+
+        Returns
+        -------
+        FilterContext | None
+            FilterContext if config available, None otherwise
+        """
+        if self._config is None:
+            return None
+        return FilterContext(config=self._config, logger=self._logger)
+
+    def register_filter(self, filter_obj: Filter) -> None:
         """Register a filter for admission control.
 
         Filters are checked in registration order when append() is called.
@@ -82,20 +96,24 @@ class LocalCache:
 
         Parameters
         ----------
-        filter_obj : QueueFilter
+        filter_obj : Filter
             Filter implementing should_accept(item, context) -> bool
         """
         self._filters.append(filter_obj)
 
-    def set_filter_context(self, context: Any) -> None:
-        """Set the context passed to filters.
+    def set_logger(self, logger: Any) -> None:
+        """Update logger and recreate FilterContext.
+
+        This is called during WorkflowExecutor.initialize() to set the logger
+        after Cache construction.
 
         Parameters
         ----------
-        context : Any
-            Context object (typically EventContext)
+        logger : Any
+            Logger instance
         """
-        self._filter_context = context
+        self._logger = logger
+        self._filter_context = self._create_filter_context()
 
     def add(self, item: Any, context: Any) -> bool:
         """Add item to cache after checking filters.
@@ -230,7 +248,19 @@ class LocalCache:
         """
         return self._cache.pop(index)
 
-    def register_event_handler(self, handler) -> None:
+    def sort(self, key=None, reverse=False) -> None:
+        """Sort cache items in place.
+
+        Parameters
+        ----------
+        key : callable, optional
+            Function of one argument used to extract comparison key
+        reverse : bool, optional
+            If True, sort in descending order. Default is False.
+        """
+        self._cache.sort(key=key, reverse=reverse)
+
+    def register_event_handler(self, handler: CacheEventHandler) -> None:
         """Register a cache event handler.
 
         Parameters
@@ -256,10 +286,12 @@ class LocalCache:
             return
 
         # Create cache-specific context with metadata
+        # Use context values (EventContext always has engine, config)
+        # Prefer stored logger if available for consistency
         cache_context = CacheEventContext(
             event_type=context.event_type,
-            engine=self._engine or context.engine,
-            config=self._config or context.config,
+            engine=context.engine,
+            config=context.config,
             logger=self._logger or context.logger,
             cache_metadata={
                 "size": len(self._cache),

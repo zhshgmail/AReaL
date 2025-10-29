@@ -8,13 +8,12 @@ recomputation of proximal_t values without knowledge of queue/cache structure.
 from __future__ import annotations
 
 import traceback
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import torch
 from tensordict import TensorDict
 
-if TYPE_CHECKING:
-    from areal.api.engine_api import InferenceEngine
+from areal.api.engine_api import InferenceEngine
 
 # Key for tracking recompute version
 RECOMPUTE_VERSION_KEY = "_recompute_version"
@@ -48,7 +47,7 @@ class ProximalRecomputeLogic:
         Logger instance for diagnostics
     """
 
-    def __init__(self, engine: "InferenceEngine", logger: Any):
+    def __init__(self, engine: InferenceEngine, logger: Any):
         self.engine = engine
         self.logger = logger
 

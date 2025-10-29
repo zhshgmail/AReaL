@@ -316,7 +316,7 @@ class RemotevLLMEngine(InferenceEngine):
     ) -> List[float]:
         """Synchronously recompute logprobs for output tokens under current policy.
 
-        This method is used by ProximalRecomputer to update proximal_t for stale
+        This method is used by proximal recomputer handlers to update proximal_t for stale
         samples before weight updates. It performs a prefill-only forward pass to
         get logprobs under the latest policy.
 

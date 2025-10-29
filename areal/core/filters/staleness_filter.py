@@ -7,16 +7,13 @@ queue or cache, preventing over-stale data from entering the training pipeline.
 from __future__ import annotations
 
 import traceback
-from typing import TYPE_CHECKING
 
 import torch
 from tensordict import TensorDict
 
-from areal.api.event_api import EventContext
-from areal.api.filter_api import Filter
-
-if TYPE_CHECKING:
-    from areal.api.cli_args import InferenceEngineConfig
+from areal.api.cli_args import InferenceEngineConfig
+from areal.api.engine_api import InferenceEngine
+from areal.api.filter_api import Filter, FilterContext
 
 # Key for tracking recompute version
 RECOMPUTE_VERSION_KEY = "_recompute_version"
@@ -25,8 +22,9 @@ RECOMPUTE_VERSION_KEY = "_recompute_version"
 class StalenessFilter(Filter):
     """Filter that rejects over-stale samples at queue/cache admission.
 
-    This is a Filter that checks staleness when items are added to
-    queue or cache. It rejects samples exceeding the staleness threshold.
+    This filter owns its dependency (engine reference) and only receives
+    generic FilterContext during admission checks. This follows proper
+    dependency injection principles.
 
     Staleness calculation:
     - For non-recomputed samples: staleness = current_ver - max(token_versions)
@@ -40,34 +38,40 @@ class StalenessFilter(Filter):
     ----------
     max_staleness : int
         Maximum allowed staleness (typically max_head_offpolicyness from config)
+    engine : InferenceEngine
+        Engine reference for getting current version (dependency injection)
 
     Examples
     --------
-    >>> filter = StalenessFilter(max_staleness=2)
-    >>> context = EventContext(event_type, engine, config, logger)
+    >>> engine = RemoteSGLangEngine(config)
+    >>> filter = StalenessFilter(max_staleness=2, engine=engine)
+    >>> context = FilterContext(config=config, logger=logger)
     >>> if filter.should_accept(sample, context):
     ...     queue.put(sample)
     """
 
-    def __init__(self, max_staleness: int):
-        """Initialize staleness filter.
+    def __init__(self, max_staleness: int, engine: InferenceEngine):
+        """Initialize staleness filter with dependencies.
 
         Parameters
         ----------
         max_staleness : int
             Maximum allowed staleness
+        engine : InferenceEngine
+            Engine reference for getting current version (stored as dependency)
         """
         self.max_staleness = max_staleness
+        self.engine = engine  # Store dependency
 
-    def should_accept(self, item: TensorDict, context: EventContext) -> bool:
+    def should_accept(self, item: TensorDict, context: FilterContext) -> bool:
         """Check if sample should be accepted based on staleness.
 
         Parameters
         ----------
         item : TensorDict
             Sample to check
-        context : EventContext
-            Context with engine, config, logger
+        context : FilterContext
+            Context with config and logger (no engine - we use self.engine)
 
         Returns
         -------
@@ -75,23 +79,26 @@ class StalenessFilter(Filter):
             True if sample should be accepted, False to reject
         """
         try:
-            current_ver = context.engine.get_version()
+            # Use stored engine reference (dependency injection)
+            current_ver = self.engine.get_version()
             staleness, allow_staleness, max_version = self._calculate_staleness(
                 item, current_ver, context.config
             )
 
             if staleness > allow_staleness:
-                context.logger.debug(
-                    f"[StalenessFilter] Rejecting sample: staleness={staleness}, "
-                    f"allow={allow_staleness}, max_ver={max_version}"
-                )
+                if context.logger:
+                    context.logger.debug(
+                        f"[StalenessFilter] Rejecting sample: staleness={staleness}, "
+                        f"allow={allow_staleness}, max_ver={max_version}"
+                    )
                 return False
 
             return True
 
         except Exception:
             # On error, accept sample to be safe
-            context.logger.error("[StalenessFilter] Error checking staleness:")
+            if context.logger:
+                context.logger.error("[StalenessFilter] Error checking staleness:")
             traceback.print_exc()
             return True
 
@@ -99,7 +106,7 @@ class StalenessFilter(Filter):
         self,
         td: TensorDict,
         current_ver: int,
-        config: "InferenceEngineConfig",
+        config: InferenceEngineConfig,
     ) -> tuple[int, int, int]:
         """Calculate staleness metrics for a sample.
 

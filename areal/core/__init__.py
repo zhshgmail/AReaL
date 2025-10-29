@@ -7,7 +7,6 @@ from .event_system import EventRegistry
 from .filters import StalenessFilter
 from .handlers import (
     RECOMPUTE_VERSION_KEY,
-    ProximalRecomputer,
     ensure_recompute_key,
 )
 from .remote_inf_engine import (
@@ -40,7 +39,6 @@ __all__ = [
     "EventHandler",
     # Filters and handlers
     "StalenessFilter",
-    "ProximalRecomputer",
     "RECOMPUTE_VERSION_KEY",
     "ensure_recompute_key",
 ]

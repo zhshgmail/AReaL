@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 import asyncio
 import os
 import random
@@ -10,7 +11,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import datetime
 from threading import Lock
-from typing import TYPE_CHECKING, Any, List, Protocol
+from typing import TYPE_CHECKING, Any, List
 
 import aiohttp
 import requests
@@ -28,6 +29,7 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
     WeightUpdateRequests,
 )
+from areal.core.workflow_executor import WorkflowExecutor
 from areal.platforms import current_platform
 from areal.utils import logging, name_resolve, names
 from areal.utils.http import arequest_with_retry, get_default_connector
@@ -41,8 +43,8 @@ if TYPE_CHECKING:
 RID_CACHE_SIZE = 128
 
 
-class RemoteInfBackendProtocol(Protocol):
-    """Protocol defining backend-specific operations for remote inference engines.
+class RemoteInfBackendProtocol(abc.ABC):
+    """Abstract base class defining backend-specific operations for remote inference engines.
 
     This protocol abstracts the differences between various remote inference servers
     (SGLang, vLLM, etc.) by defining a common interface for:
@@ -55,6 +57,7 @@ class RemoteInfBackendProtocol(Protocol):
     Implementations can raise NotImplementedError for unsupported features.
     """
 
+    @abc.abstractmethod
     def build_generation_request(
         self, req: ModelRequest, with_lora: bool
     ) -> HttpRequest:
@@ -72,8 +75,9 @@ class RemoteInfBackendProtocol(Protocol):
         HttpRequest
             The HTTP request with endpoint and payload
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def parse_generation_response(
         self, response: dict[str, Any]
     ) -> HttpGenerationResult:
@@ -89,8 +93,9 @@ class RemoteInfBackendProtocol(Protocol):
         HttpGenerationResult
             Parsed result with tokens, logprobs, and stop reason
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def build_disk_weight_update_requests(
         self, meta: WeightUpdateMeta, lora_initialized: bool
     ) -> WeightUpdateRequests:
@@ -110,8 +115,9 @@ class RemoteInfBackendProtocol(Protocol):
         WeightUpdateRequests
             Collection of HTTP requests (may be multiple for LoRA workflows)
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def build_distributed_weight_update_requests(
         self, meta: WeightUpdateMeta, param_specs: list[ParamSpec]
     ) -> WeightUpdateRequests:
@@ -129,8 +135,9 @@ class RemoteInfBackendProtocol(Protocol):
         WeightUpdateRequests
             Collection of HTTP requests for distributed update
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def build_init_weights_group_request(
         self, addr: str, server_idx: int, meta: WeightUpdateMeta
     ) -> HttpRequest:
@@ -150,8 +157,9 @@ class RemoteInfBackendProtocol(Protocol):
         HttpRequest
             The HTTP request to initialize the group
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def get_pause_request(self) -> HttpRequest:
         """Get request to pause generation.
 
@@ -165,8 +173,9 @@ class RemoteInfBackendProtocol(Protocol):
         NotImplementedError
             If pause is not supported by this backend
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def get_resume_request(self) -> HttpRequest:
         """Get request to resume generation.
 
@@ -180,8 +189,9 @@ class RemoteInfBackendProtocol(Protocol):
         NotImplementedError
             If resume is not supported by this backend
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def get_health_check_request(self) -> HttpRequest:
         """Get the health check request.
 
@@ -190,7 +200,7 @@ class RemoteInfBackendProtocol(Protocol):
         HttpRequest
             The HTTP request for health checks
         """
-        ...
+        pass
 
 
 class RemoteInfEngine:
@@ -567,23 +577,15 @@ class RemoteInfEngine:
 
         # Fire PRE_UPDATE event BEFORE weight update
         if self.event_registry is not None:
-            from areal.api.event_api import EventContext, EventType
+            from areal.api.event_api import EventType
 
             old_version = self.get_version()
-            context = EventContext(
-                event_type=EventType.BEFORE_POLICY_UPDATE,
-                engine=self,
-                config=self.config,
-                logger=self.logger,
-                data={
-                    "old_version": old_version,
-                },
-            )
             self.logger.debug(
                 f"Firing PRE_UPDATE event before distributed weight update (v{old_version} -> v{old_version + 1})"
             )
             # EventPropagator will propagate this to queue and cache
-            self.event_registry.fire_event(context)
+            # EventRegistry automatically constructs EventContext
+            self.event_registry.fire_event(EventType.BEFORE_POLICY_UPDATE)
             self.logger.debug("PRE_UPDATE event completed")
 
         fut = self.executor.submit(
@@ -598,20 +600,12 @@ class RemoteInfEngine:
         def callback(fut):
             # Fire POST_UPDATE event AFTER weight update completes
             if self.event_registry is not None:
-                from areal.api.event_api import EventContext, EventType
+                from areal.api.event_api import EventType
 
                 new_version = self.get_version()
-                context = EventContext(
-                    event_type=EventType.AFTER_POLICY_UPDATE,
-                    engine=self,
-                    config=self.config,
-                    logger=self.logger,
-                    data={
-                        "new_version": new_version,
-                    },
-                )
                 self.logger.debug(f"Firing POST_UPDATE event after distributed weight update (v{new_version})")
-                self.event_registry.fire_event(context)
+                # EventRegistry automatically constructs EventContext
+                self.event_registry.fire_event(EventType.AFTER_POLICY_UPDATE)
 
         fut.add_done_callback(callback)
 
@@ -643,23 +637,15 @@ class RemoteInfEngine:
         # Fire PRE_UPDATE event BEFORE weight update
         # This is where recompute happens using CURRENT policy
         if self.event_registry is not None:
-            from areal.api.event_api import EventContext, EventType
+            from areal.api.event_api import EventType
 
             old_version = self.get_version()
-            context = EventContext(
-                event_type=EventType.BEFORE_POLICY_UPDATE,
-                engine=self,
-                config=self.config,
-                logger=self.logger,
-                data={
-                    "old_version": old_version,
-                },
-            )
             self.logger.debug(
                 f"Firing PRE_UPDATE event before weight update (v{old_version} -> v{old_version + 1})"
             )
             # EventPropagator will propagate this to queue and cache
-            self.event_registry.fire_event(context)
+            # EventRegistry automatically constructs EventContext
+            self.event_registry.fire_event(EventType.BEFORE_POLICY_UPDATE)
             self.logger.debug("PRE_UPDATE event completed")
 
         fut = self.executor.submit(
@@ -689,20 +675,12 @@ class RemoteInfEngine:
 
             # Fire POST_UPDATE event AFTER weight update completes
             if self.event_registry is not None:
-                from areal.api.event_api import EventContext, EventType
+                from areal.api.event_api import EventType
 
                 new_version = self.get_version()
-                context = EventContext(
-                    event_type=EventType.AFTER_POLICY_UPDATE,
-                    engine=self,
-                    config=self.config,
-                    logger=self.logger,
-                    data={
-                        "new_version": new_version,
-                    },
-                )
                 self.logger.debug(f"Firing POST_UPDATE event after weight update (v{new_version})")
-                self.event_registry.fire_event(context)
+                # EventRegistry automatically constructs EventContext
+                self.event_registry.fire_event(EventType.AFTER_POLICY_UPDATE)
 
         fut.add_done_callback(callback)
 

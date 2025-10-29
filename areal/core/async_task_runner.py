@@ -17,13 +17,12 @@ import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 import uvloop
 
-if TYPE_CHECKING:
-    from areal.api.cache_api import CacheAPI
-    from areal.api.queue_api import QueueAPI
+from areal.api.cache_api import CacheAPI
+from areal.api.queue_api import QueueAPI
 
 # Type variable for generic result types
 T = TypeVar("T")
@@ -77,24 +76,31 @@ class AsyncTaskRunner(Generic[T]):
     Parameters
     ----------
     max_queue_size : int
-        Maximum size for input and output queues. Tasks submitted when
-        the input queue is full will raise RuntimeError.
+        Maximum size for queues (used for validation, actual sizes managed by QueueAPI).
+    input_queue : QueueAPI[_TaskInput[T]]
+        Input queue implementing QueueAPI protocol. Must be provided by factory.
+    output_queue : QueueAPI[_TimedResult[T]]
+        Output queue implementing QueueAPI protocol. Must be provided by factory.
+    result_cache : CacheAPI[_TimedResult[T]]
+        Result cache implementing CacheAPI protocol. Must be provided by factory.
     poll_wait_time : float, optional
         Time in seconds to wait for task completion during each poll
         cycle. Default is 0.05 (50ms).
     poll_sleep_time : float, optional
         Time in seconds to sleep between poll cycles.
-        Default is 1.0 second.
+        Default is 0.5 second.
     enable_tracing : bool, optional
         Enable detailed logging of task submission and completion.
         Default is False.
 
     Attributes
     ----------
-    input_queue : queue.Queue
-        Thread-safe queue for incoming task submissions.
-    output_queue : queue.Queue
-        Thread-safe queue for completed task results.
+    input_queue : QueueAPI[_TaskInput[T]]
+        Queue for incoming task submissions implementing QueueAPI protocol.
+    output_queue : QueueAPI[_TimedResult[T]]
+        Queue for completed task results implementing QueueAPI protocol.
+    result_cache : CacheAPI[_TimedResult[T]]
+        Cache for completed results implementing CacheAPI protocol.
     exiting : threading.Event
         Signal to request thread shutdown.
     paused : threading.Event
@@ -102,10 +108,31 @@ class AsyncTaskRunner(Generic[T]):
 
     Examples
     --------
-    Basic usage with simple async functions:
+    AsyncTaskRunner requires input_queue, output_queue, and result_cache to be
+    provided by the factory. For production use:
+
+    >>> from areal.core.workflow_factory import create_workflow_executor
+    >>> executor = create_workflow_executor(config, engine)
+    >>> # executor.runner is the AsyncTaskRunner with proper queues/cache
+
+    Basic usage example (for illustration, queues/cache should come from factory):
 
     >>> import asyncio
-    >>> runner = AsyncTaskRunner[int](max_queue_size=100)
+    >>> from areal.core.local_queue import LocalQueue
+    >>> from areal.core.local_cache import LocalCache
+    >>>
+    >>> # Create queues/cache (in production, use factory)
+    >>> input_queue = LocalQueue(maxsize=100)
+    >>> output_queue = LocalQueue(maxsize=100)
+    >>> result_cache = LocalCache()
+    >>>
+    >>> # Create runner with all required components
+    >>> runner = AsyncTaskRunner[int](
+    ...     max_queue_size=100,
+    ...     input_queue=input_queue,
+    ...     output_queue=output_queue,
+    ...     result_cache=result_cache,
+    ... )
     >>> runner.initialize()
     >>>
     >>> async def compute(x: int) -> int:
@@ -124,7 +151,16 @@ class AsyncTaskRunner(Generic[T]):
 
     Using pause/resume for control:
 
-    >>> runner = AsyncTaskRunner[str](max_queue_size=50)
+    >>> # Create runner with all required components
+    >>> input_queue = LocalQueue(maxsize=50)
+    >>> output_queue = LocalQueue(maxsize=50)
+    >>> result_cache = LocalCache()
+    >>> runner = AsyncTaskRunner[str](
+    ...     max_queue_size=50,
+    ...     input_queue=input_queue,
+    ...     output_queue=output_queue,
+    ...     result_cache=result_cache,
+    ... )
     >>> runner.initialize()
     >>>
     >>> async def fetch_data(url: str) -> str:
@@ -154,8 +190,9 @@ class AsyncTaskRunner(Generic[T]):
     def __init__(
         self,
         max_queue_size: int,
-        output_queue: QueueAPI,
-        result_cache: CacheAPI,
+        input_queue: QueueAPI[_TaskInput[T]],
+        output_queue: QueueAPI[_TimedResult[T]],
+        result_cache: CacheAPI[_TimedResult[T]],
         poll_wait_time: float = DEFAULT_POLL_WAIT_TIME,
         poll_sleep_time: float = DEFAULT_POLL_SLEEP_TIME,
         enable_tracing: bool = False,
@@ -165,13 +202,16 @@ class AsyncTaskRunner(Generic[T]):
         Parameters
         ----------
         max_queue_size : int
-            Maximum size for input queue (output_queue size is managed by QueueAPI).
-        output_queue : QueueAPI
+            Maximum size for queues (used for validation, actual sizes managed by QueueAPI).
+        input_queue : QueueAPI[_TaskInput[T]]
+            Input queue implementing QueueAPI protocol (e.g., LocalQueue, ZeroMQQueue).
+            REQUIRED - must be provided by factory. Holds _TaskInput[T] items.
+        output_queue : QueueAPI[_TimedResult[T]]
             Output queue implementing QueueAPI protocol (e.g., LocalQueue, ZeroMQQueue).
-            REQUIRED - must be provided by factory.
-        result_cache : CacheAPI
+            REQUIRED - must be provided by factory. Holds _TimedResult[T] items.
+        result_cache : CacheAPI[_TimedResult[T]]
             Result cache implementing CacheAPI protocol (e.g., LocalCache, RedisCache).
-            REQUIRED - must be provided by factory.
+            REQUIRED - must be provided by factory. Holds _TimedResult[T] items.
         poll_wait_time : float, optional
             Time in seconds to wait for task completion during polling.
             Default is 0.05.
@@ -183,8 +223,8 @@ class AsyncTaskRunner(Generic[T]):
 
         Notes
         -----
-        The output_queue and result_cache must be provided by the factory
-        (e.g., event_factory.create_workflow_executor_with_events) with
+        The input_queue, output_queue, and result_cache must be provided by the factory
+        (e.g., workflow_factory.create_workflow_executor_with_events) with
         proper filters and event handlers configured.
         """
         self.max_queue_size = max_queue_size
@@ -196,15 +236,14 @@ class AsyncTaskRunner(Generic[T]):
         self.exiting = threading.Event()
         self.paused = threading.Event()
 
-        # Queues for task management
-        self.input_queue: queue.Queue[_TaskInput[T]] = queue.Queue(
-            maxsize=max_queue_size
-        )
-
         # REQUIRED: Use provided QueueAPI and CacheAPI instances
         # Factory is responsible for creating and configuring these
-        self.output_queue: QueueAPI = output_queue
-        self.result_cache: CacheAPI = result_cache
+        # Generic types specify what each queue/cache holds:
+        # - input_queue holds _TaskInput[T] items
+        # - output_queue/result_cache hold _TimedResult[T] items
+        self.input_queue: QueueAPI[_TaskInput[T]] = input_queue
+        self.output_queue: QueueAPI[_TimedResult[T]] = output_queue
+        self.result_cache: CacheAPI[_TimedResult[T]] = result_cache
 
         # Thread exception handling
         self._thread_exception_lock = threading.Lock()

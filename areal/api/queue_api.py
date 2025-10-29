@@ -1,4 +1,4 @@
-"""Queue API protocol for async task execution.
+"""Queue API base class for async task execution.
 
 This module defines the Queue interface that AsyncTaskRunner uses.
 Concrete implementations can use different backends (local queue.Queue,
@@ -7,11 +7,15 @@ ZeroMQ, Redis, etc.) without changing the TaskRunner code.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+import abc
+from typing import Any, Generic, TypeVar
+
+# Type variable for generic queue item types
+T = TypeVar("T")
 
 
-class QueueAPI(Protocol):
-    """Protocol defining the Queue interface for AsyncTaskRunner.
+class QueueAPI(abc.ABC, Generic[T]):
+    """Abstract base class defining the Queue interface for AsyncTaskRunner.
 
     This interface abstracts queue operations, allowing different
     implementations (local, distributed, persistent, etc.) without
@@ -29,12 +33,13 @@ class QueueAPI(Protocol):
     - EtcdQueue: Distributed queue using Etcd
     """
 
-    def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:
+    @abc.abstractmethod
+    def put(self, item: T, block: bool = True, timeout: float | None = None) -> None:
         """Put an item into the queue.
 
         Parameters
         ----------
-        item : Any
+        item : T
             Item to put into queue
         block : bool, optional
             Whether to block if queue is full. Default is True.
@@ -46,14 +51,15 @@ class QueueAPI(Protocol):
         queue.Full
             If queue is full and operation times out
         """
-        ...
+        pass
 
-    def put_nowait(self, item: Any) -> None:
+    @abc.abstractmethod
+    def put_nowait(self, item: T) -> None:
         """Put an item into the queue without blocking.
 
         Parameters
         ----------
-        item : Any
+        item : T
             Item to put into queue
 
         Raises
@@ -61,9 +67,10 @@ class QueueAPI(Protocol):
         queue.Full
             If queue is full
         """
-        ...
+        pass
 
-    def get(self, block: bool = True, timeout: float | None = None) -> Any:
+    @abc.abstractmethod
+    def get(self, block: bool = True, timeout: float | None = None) -> T:
         """Remove and return an item from the queue.
 
         Parameters
@@ -75,7 +82,7 @@ class QueueAPI(Protocol):
 
         Returns
         -------
-        Any
+        T
             Item from queue
 
         Raises
@@ -83,14 +90,15 @@ class QueueAPI(Protocol):
         queue.Empty
             If queue is empty and operation times out
         """
-        ...
+        pass
 
-    def get_nowait(self) -> Any:
+    @abc.abstractmethod
+    def get_nowait(self) -> T:
         """Remove and return an item from the queue without blocking.
 
         Returns
         -------
-        Any
+        T
             Item from queue
 
         Raises
@@ -98,8 +106,9 @@ class QueueAPI(Protocol):
         queue.Empty
             If queue is empty
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def qsize(self) -> int:
         """Return the approximate size of the queue.
 
@@ -108,8 +117,9 @@ class QueueAPI(Protocol):
         int
             Number of items in queue
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def empty(self) -> bool:
         """Return True if the queue is empty.
 
@@ -118,8 +128,9 @@ class QueueAPI(Protocol):
         bool
             Whether queue is empty
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def full(self) -> bool:
         """Return True if the queue is full.
 
@@ -128,4 +139,4 @@ class QueueAPI(Protocol):
         bool
             Whether queue is full
         """
-        ...
+        pass

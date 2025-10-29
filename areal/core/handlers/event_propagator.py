@@ -6,15 +6,10 @@ to queue and cache without exposing their internal structures.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from areal.api.event_api import EventContext
-
-if TYPE_CHECKING:
-    pass
+from areal.api.event_api import EventContext, EventHandler
 
 
-class EventPropagator:
+class EventPropagator(EventHandler):
     """Propagates global events to queue and cache.
 
     This handler is registered in the global EventRegistry. When a global

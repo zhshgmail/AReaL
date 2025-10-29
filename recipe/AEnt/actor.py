@@ -103,6 +103,8 @@ class AEntPPOActor(PPOActor):
             scalars["use_dual_clip"] = 0
         if self.config.behav_imp_weight_cap is not None:
             scalars["behav_imp_weight_cap"] = self.config.behav_imp_weight_cap
+        if self.config.behav_imp_weight_floor is not None:
+            scalars["behav_imp_weight_floor"] = self.config.behav_imp_weight_floor
         stats_tracker.scalar(**scalars)
 
         if self.config.log_agent_stats:
@@ -142,6 +144,7 @@ class AEntPPOActor(PPOActor):
                     entropy_clamp=self.entropy_clamp,
                     c_clip=self.config.c_clip,
                     behav_imp_weight_cap=self.config.behav_imp_weight_cap,
+                    behav_imp_weight_floor=self.config.behav_imp_weight_floor,
                 ),
                 loss_weight_fn=lambda x: x["loss_mask"].count_nonzero(),
             )
@@ -192,6 +195,7 @@ def aent_grpo_loss_fn(
     eps_clip_higher: float | None,
     c_clip: float | None,
     behav_imp_weight_cap: float | None,
+    behav_imp_weight_floor: float | None,
 ):
     labels = input_data.get(
         "rolled_input_ids",
@@ -203,6 +207,12 @@ def aent_grpo_loss_fn(
     # Ulysses SP will slice loss_mask in ulysses_prepare_inputs().
     loss_mask = input_data.get("full_loss_mask", input_data["loss_mask"]).bool()
     prox_logp = input_data["prox_logp"]
+
+    # Extract proximal_logprobs_t for segment-wise decoupled PPO
+    proximal_logprobs_t = input_data.get("proximal_logprobs_t", None)
+    if proximal_logprobs_t is not None:
+        # Roll to align with rolled labels
+        proximal_logprobs_t = torch.roll(proximal_logprobs_t, shifts=-1, dims=-1)
 
     if entropy_clamp > 0:
         logprobs, clamped_entropy = gather_logprobs_clamped_entropy(
@@ -219,7 +229,9 @@ def aent_grpo_loss_fn(
         loss_mask=loss_mask,
         c_clip=c_clip,
         proximal_logprobs=prox_logp,
+        proximal_logprobs_t=proximal_logprobs_t,
         behav_imp_weight_cap=behav_imp_weight_cap,
+        behav_imp_weight_floor=behav_imp_weight_floor,
     )
     # add AEnt's clamped entropy regularizer
     clamped_entropy_loss = clamped_entropy_loss_fn(clamped_entropy, loss_mask)

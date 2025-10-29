@@ -9,9 +9,6 @@ from .proximal_recompute_logic import (
 )
 from .queue_proximal_recomputer import QueueProximalRecomputer
 
-# Keep old ProximalRecomputer for backward compatibility (deprecated)
-from .proximal_recomputer import ProximalRecomputer
-
 __all__ = [
     "EventPropagator",
     "QueueProximalRecomputer",
@@ -19,6 +16,4 @@ __all__ = [
     "ProximalRecomputeLogic",
     "RECOMPUTE_VERSION_KEY",
     "ensure_recompute_key",
-    # Deprecated
-    "ProximalRecomputer",
 ]

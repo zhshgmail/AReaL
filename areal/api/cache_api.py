@@ -1,4 +1,4 @@
-"""Cache API protocol for result storage.
+"""Cache API base class for result storage.
 
 This module defines the Cache interface that WorkflowExecutor uses.
 Concrete implementations can use different backends (local list,
@@ -7,11 +7,15 @@ distributed cache, persistent storage, etc.) without changing client code.
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Protocol
+import abc
+from typing import Any, Generic, Iterator, TypeVar
+
+# Type variable for generic cache item types
+T = TypeVar("T")
 
 
-class CacheAPI(Protocol):
-    """Protocol defining the Cache interface for WorkflowExecutor.
+class CacheAPI(abc.ABC, Generic[T]):
+    """Abstract base class defining the Cache interface for WorkflowExecutor.
 
     This interface abstracts cache operations, allowing different
     implementations (local, distributed, persistent, etc.) without
@@ -29,16 +33,18 @@ class CacheAPI(Protocol):
     - MemcachedCache: Distributed cache using Memcached
     """
 
-    def append(self, item: Any) -> None:
+    @abc.abstractmethod
+    def append(self, item: T) -> None:
         """Append an item to the cache.
 
         Parameters
         ----------
-        item : Any
+        item : T
             Item to append to cache
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def __len__(self) -> int:
         """Return the number of items in cache.
 
@@ -47,19 +53,21 @@ class CacheAPI(Protocol):
         int
             Number of items
         """
-        ...
+        pass
 
-    def __iter__(self) -> Iterator[Any]:
+    @abc.abstractmethod
+    def __iter__(self) -> Iterator[T]:
         """Iterate over cache items.
 
         Yields
         ------
-        Any
+        T
             Items in cache
         """
-        ...
+        pass
 
-    def __getitem__(self, index: int | slice) -> Any:
+    @abc.abstractmethod
+    def __getitem__(self, index: int | slice) -> T:
         """Get item(s) by index.
 
         Parameters
@@ -69,38 +77,42 @@ class CacheAPI(Protocol):
 
         Returns
         -------
-        Any
+        T
             Item(s) at index
         """
-        ...
+        pass
 
-    def __setitem__(self, index: int, value: Any) -> None:
+    @abc.abstractmethod
+    def __setitem__(self, index: int, value: T) -> None:
         """Set item by index.
 
         Parameters
         ----------
         index : int
             Index
-        value : Any
+        value : T
             Value to set
         """
-        ...
+        pass
 
+    @abc.abstractmethod
     def clear(self) -> None:
         """Clear all items from cache."""
-        ...
+        pass
 
-    def extend(self, items: list[Any]) -> None:
+    @abc.abstractmethod
+    def extend(self, items: list[T]) -> None:
         """Extend cache with multiple items.
 
         Parameters
         ----------
-        items : list[Any]
+        items : list[T]
             Items to extend cache with
         """
-        ...
+        pass
 
-    def pop(self, index: int = -1) -> Any:
+    @abc.abstractmethod
+    def pop(self, index: int = -1) -> T:
         """Remove and return item at index.
 
         Parameters
@@ -110,7 +122,7 @@ class CacheAPI(Protocol):
 
         Returns
         -------
-        Any
+        T
             Popped item
         """
-        ...
+        pass

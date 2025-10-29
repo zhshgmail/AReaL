@@ -1,4 +1,4 @@
-"""Cache event handler protocol.
+"""Cache event handler base class.
 
 This module defines the interface for handling events within Cache implementations.
 Cache-specific event handlers are registered ON the cache, not in the global
@@ -7,48 +7,71 @@ EventRegistry, maintaining encapsulation of cache internals.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+import abc
+from typing import Any
+
+from areal.api.cli_args import InferenceEngineConfig
+from areal.api.engine_api import InferenceEngine
+from areal.api.event_api import EventContext, EventType
 
 
-class CacheEventContext:
+class CacheEventContext(EventContext):
     """Context for cache-specific events.
 
-    This context is created by the Cache implementation and passed to
-    cache event handlers. It does NOT expose the cache's internal structure
-    (e.g., list), only the information handlers need.
+    This context extends EventContext with cache-specific metadata.
+    It is created by the Cache implementation and passed to cache event handlers.
+    It does NOT expose the cache's internal structure (e.g., list),
+    only the information handlers need.
 
     Attributes
     ----------
-    event_type : Any
-        Type of event (e.g., PRE_UPDATE, POST_UPDATE)
-    engine : Any
+    event_type : EventType
+        Type of event (e.g., BEFORE_POLICY_UPDATE)
+    engine : InferenceEngine
         Inference engine reference
-    config : Any
+    config : InferenceEngineConfig
         Configuration object
     logger : Any
         Logger instance
-    cache_metadata : dict
-        Cache-specific metadata (size, items count, etc.)
+    data : dict[str, Any]
+        Event-specific data (inherited from EventContext)
+    cache_metadata : dict[str, Any]
+        Cache-specific metadata (size, process_items function)
         Does NOT include direct cache access
     """
 
     def __init__(
         self,
-        event_type: Any,
-        engine: Any,
-        config: Any,
+        event_type: EventType,
+        engine: InferenceEngine,
+        config: InferenceEngineConfig,
         logger: Any,
         cache_metadata: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
     ):
-        self.event_type = event_type
-        self.engine = engine
-        self.config = config
-        self.logger = logger
+        """Initialize cache event context.
+
+        Parameters
+        ----------
+        event_type : EventType
+            Type of event
+        engine : InferenceEngine
+            Inference engine reference
+        config : InferenceEngineConfig
+            Configuration object
+        logger : Any
+            Logger instance
+        cache_metadata : dict[str, Any] | None, optional
+            Cache-specific metadata. Default is None.
+        data : dict[str, Any] | None, optional
+            Event-specific data. Default is None.
+        """
+        super().__init__(event_type, engine, config, logger, data)
         self.cache_metadata = cache_metadata or {}
 
 
-class CacheEventHandler(Protocol):
-    """Protocol for handlers of cache-specific events.
+class CacheEventHandler(abc.ABC):
+    """Abstract base class for handlers of cache-specific events.
 
     Cache event handlers are registered ON the cache implementation itself,
     not in the global EventRegistry. This maintains encapsulation - handlers
@@ -57,7 +80,7 @@ class CacheEventHandler(Protocol):
 
     Examples
     --------
-    >>> class CacheProximalRecomputer:
+    >>> class CacheProximalRecomputer(CacheEventHandler):
     ...     def on_cache_event(self, context: CacheEventContext):
     ...         # Work with context metadata, not direct cache access
     ...         if context.event_type == EventType.PRE_UPDATE:
@@ -66,6 +89,7 @@ class CacheEventHandler(Protocol):
     ...                 self.recompute(item)
     """
 
+    @abc.abstractmethod
     def on_cache_event(self, context: CacheEventContext) -> None:
         """Handle cache-specific event.
 
@@ -74,4 +98,4 @@ class CacheEventHandler(Protocol):
         context : CacheEventContext
             Cache event context with metadata, not direct cache access
         """
-        ...
+        pass

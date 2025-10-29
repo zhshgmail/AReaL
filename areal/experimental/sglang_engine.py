@@ -16,8 +16,8 @@ from areal.api.io_struct import (
     WeightUpdateMeta,
 )
 from areal.api.workflow_api import RolloutWorkflow
-from areal.core import WorkflowExecutor
-from areal.core.workflow_executor import WorkflowExecutor
+from areal.core.event_system import EventRegistry
+from areal.core.workflow_factory import create_workflow_executor
 from areal.utils import logging, name_resolve, names, pkg_version
 
 logger = logging.getLogger(__name__)
@@ -47,16 +47,15 @@ class SGLangEngine(InferenceEngine):
         self.config = config
         self.engine_args = engine_args or {}
 
-        qsize = config.queue_size or config.max_concurrent_rollouts * 10
-        self.input_queue = Queue(maxsize=qsize)
-        self.output_queue = Queue(maxsize=qsize)
-        self.result_cache = []
-
         self._version = 0
+        self.event_registry: EventRegistry = None  # Will be set by factory if using events
 
-        self.workflow_executor = WorkflowExecutor(
+        # Use factory to create WorkflowExecutor with proper dependency injection
+        # Factory creates AsyncTaskRunner with appropriate Queue/Cache instances
+        self.workflow_executor = create_workflow_executor(
             config=config,
             inference_engine=self,
+            staleness_manager=None,
         )
 
     def initialize(
@@ -178,6 +177,12 @@ class SGLangEngine(InferenceEngine):
             )
         if meta.type == "disk":
             try:
+                # Fire BEFORE_POLICY_UPDATE event if event system is enabled
+                if self.event_registry is not None:
+                    from areal.api.event_api import EventType
+
+                    self.event_registry.fire_event(EventType.BEFORE_POLICY_UPDATE)
+
                 update_name = names.update_weights_from_disk(
                     self.config.experiment_name,
                     self.config.trial_name,

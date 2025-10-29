@@ -1,40 +1,53 @@
 """Queue-specific proximal logprob recomputation handler.
 
 This handler responds to queue events and recomputes proximal_t for stale samples
-in the queue before policy updates. It delegates actual recomputation logic to
-ProximalRecomputeLogic and only handles queue-specific message structure.
+in the queue before policy updates. It owns its dependencies (engine reference)
+and delegates actual recomputation logic to ProximalRecomputeLogic.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
+from areal.api.engine_api import InferenceEngine
 from areal.api.event_api import EventType
-from areal.api.queue_event_handler import QueueEventContext
+from areal.api.queue_event_handler import QueueEventContext, QueueEventHandler
 from areal.core.handlers.proximal_recompute_logic import ProximalRecomputeLogic
 
-if TYPE_CHECKING:
-    pass
 
-
-class QueueProximalRecomputer:
+class QueueProximalRecomputer(QueueEventHandler):
     """Queue event handler for recomputing proximal_t before policy updates.
 
-    This handler is registered ON the queue (LocalQueue) and responds to
-    queue-specific events. It uses QueueEventContext (metadata only) to
-    process queue items without directly accessing queue.Queue.
+    This handler owns its dependency (engine reference) following proper
+    dependency injection. It is registered ON the queue (LocalQueue) and responds
+    to queue-specific events using QueueEventContext (metadata only).
 
     The actual recomputation logic is delegated to ProximalRecomputeLogic.
     This class only handles queue-specific message structure.
 
+    Parameters
+    ----------
+    engine : InferenceEngine
+        Engine reference for recomputation (dependency injection)
+
     Examples
     --------
-    >>> recomputer = QueueProximalRecomputer()
+    >>> engine = RemoteSGLangEngine(config)
+    >>> recomputer = QueueProximalRecomputer(engine=engine)
     >>> queue.register_event_handler(recomputer)
     >>>
     >>> # When EventPropagator fires, queue calls registered handlers
     >>> queue.on_event(global_context)
     """
+
+    def __init__(self, engine: InferenceEngine):
+        """Initialize recomputer with engine dependency.
+
+        Parameters
+        ----------
+        engine : InferenceEngine
+            Engine reference for recomputation (stored as dependency)
+        """
+        self.engine = engine
+        self.recompute_logic: ProximalRecomputeLogic | None = None
 
     def on_queue_event(self, context: QueueEventContext) -> None:
         """Handle queue event by recomputing proximal_t for stale samples.
@@ -49,17 +62,19 @@ class QueueProximalRecomputer:
             return
 
         # Check if engine supports recompute
-        if not hasattr(context.engine, "recompute_output_logprobs_sync"):
+        if not hasattr(self.engine, "recompute_output_logprobs_sync"):
             if context.logger:
                 context.logger.debug(
                     "[QueueProximalRecomputer] Engine does not support recompute, skipping"
                 )
             return
 
-        current_ver = context.engine.get_version()
+        # Use stored engine reference
+        current_ver = self.engine.get_version()
 
-        # Create recompute logic instance
-        recompute_logic = ProximalRecomputeLogic(context.engine, context.logger)
+        # Create or reuse recompute logic instance
+        if self.recompute_logic is None:
+            self.recompute_logic = ProximalRecomputeLogic(self.engine, context.logger)
 
         # Get process_items method from metadata
         process_items = context.queue_metadata.get("process_items")
@@ -72,7 +87,7 @@ class QueueProximalRecomputer:
 
         # Process all items in queue using the provided method
         total_recomputed = process_items(
-            lambda item, idx: recompute_logic.recompute_sample(
+            lambda item, idx: self.recompute_logic.recompute_sample(
                 item, current_ver, f"queue#{idx}"
             )
         )
