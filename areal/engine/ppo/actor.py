@@ -50,6 +50,20 @@ class PPOActor:
 
         self.m2_threshold = config.m2_threshold
 
+        # DEBUG: Log critical configuration
+        from areal.utils import logging
+        logger = logging.getLogger("gspo_config")
+        logger.info("=" * 80)
+        logger.info("[CONFIG DEBUG] PPOActor Configuration:")
+        logger.info(f"[CONFIG DEBUG]   importance_sampling_level: {getattr(config, 'importance_sampling_level', 'NOT SET (defaults to token)')}")
+        logger.info(f"[CONFIG DEBUG]   adv_norm: {config.adv_norm if config.adv_norm else 'DISABLED (None)'}")
+        logger.info(f"[CONFIG DEBUG]   reward_norm: {config.reward_norm if config.reward_norm else 'DISABLED (None)'}")
+        logger.info(f"[CONFIG DEBUG]   eps_clip: {config.eps_clip}")
+        logger.info(f"[CONFIG DEBUG]   group_size: {config.group_size}")
+        logger.info(f"[CONFIG DEBUG]   recompute_logprob: {config.recompute_logprob}")
+        logger.info(f"[CONFIG DEBUG]   use_decoupled_loss: {config.use_decoupled_loss}")
+        logger.info("=" * 80)
+
     @torch.no_grad()
     def compute_logp(
         self,
@@ -328,6 +342,22 @@ def grpo_loss_fn(
 ):
     """Loss function for actor step, all inputs should be splitted into
     pipeline micro batches, returns loss and logging stats."""
+
+    # DEBUG: Log importance_sampling_level on first call (use a static flag)
+    if not hasattr(grpo_loss_fn, '_debug_logged'):
+        from areal.utils import logging
+        logger = logging.getLogger("gspo_config")
+        logger.info("=" * 80)
+        logger.info(f"[CONFIG DEBUG] grpo_loss_fn called with:")
+        logger.info(f"[CONFIG DEBUG]   importance_sampling_level: '{importance_sampling_level}'")
+        logger.info(f"[CONFIG DEBUG]   eps_clip: {eps_clip}")
+        logger.info(f"[CONFIG DEBUG]   m2_threshold: {m2_threshold}")
+        logger.info(f"[CONFIG DEBUG]   cu_seqlens in input_data: {'cu_seqlens' in input_data}")
+        if 'cu_seqlens' in input_data:
+            logger.info(f"[CONFIG DEBUG]   cu_seqlens shape: {input_data['cu_seqlens'].shape}")
+        logger.info("=" * 80)
+        grpo_loss_fn._debug_logged = True
+
     # Use rolled input_ids. Ulysses SP will roll input_ids in ulysses_prepare_inputs().
     labels = input_data.get(
         "rolled_input_ids",
