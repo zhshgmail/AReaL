@@ -22,7 +22,7 @@ The key distinction between GSPO and traditional PPO lies in the computation of 
 **GSPO (sequence-level):**
 - Computes sequence-level geometric mean ratio: $r_i(\theta) = \exp\left(\frac{1}{|o_i|}\sum_{t=1}^{|o_i|} \log\frac{\pi_\theta(o_{i,t} \mid q, o_{i,<t})}{\pi_{\theta_{\text{old}}}(o_{i,t} \mid q, o_{i,<t})}\right)$
 - All tokens in a sequence share the same importance weight
-- Advantages are summed across the sequence
+- **Advantages are aggregated per sequence**: Each sequence contributes its total advantage (sum of per-token advantages) to the objective, ensuring gradient magnitude is independent of sequence length
 
 ## Key Differences from Related Algorithms
 
@@ -30,7 +30,31 @@ The key distinction between GSPO and traditional PPO lies in the computation of 
 |-----------|------------------------|----------------------|---------------|
 | **PPO** | Token-level | Per-token | General RL tasks |
 | **GRPO** | Token-level | Group-normalized per-token | Critic-free RL with sparse rewards |
-| **GSPO** | Sequence-level (geometric mean) | Sequence-summed | Sequence-level rewards, MoE training |
+| **GSPO** | Sequence-level (geometric mean) | Per-sequence total (averaged per token, summed over tokens) | Sequence-level rewards, MoE training |
+
+## Implementation Details
+
+### Advantage Aggregation
+
+The GSPO paper objective is:
+
+$$\mathcal{J}_\text{GSPO}(\theta) = \mathbb{E}\left[\frac{1}{G} \sum_{i=1}^{G} \min(s_i(\theta) \hat{A}_i, \text{clip}(s_i(\theta)) \hat{A}_i)\right]$$
+
+where $\hat{A}_i$ is the **total advantage for sequence $i$** (sum of per-token advantages).
+
+**Critical Implementation Note**: To ensure gradient magnitude is independent of sequence length:
+
+1. Compute sequence-level advantage: $\hat{A}_i = \sum_{t=1}^{|y_i|} A_{i,t}$
+2. Compute average advantage per token: $\bar{A}_i = \frac{\hat{A}_i}{|y_i|}$
+3. Broadcast $\bar{A}_i$ to all tokens in sequence $i$
+4. When summing over tokens in the loss, each sequence contributes: $|y_i| \times \bar{A}_i = \hat{A}_i$
+
+This ensures that:
+- Each sequence contributes proportionally to its total advantage, not its length
+- Longer sequences don't dominate the gradient
+- Gradient magnitude remains stable across varying sequence lengths
+
+**Common Pitfall**: Broadcasting $\hat{A}_i$ (sum) instead of $\bar{A}_i$ (average) causes gradients to scale by sequence length, leading to high gradient norms and training instability.
 
 For more details:
 
