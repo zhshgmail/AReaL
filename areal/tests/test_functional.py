@@ -172,16 +172,16 @@ class TestPPOActorLossFnSequenceLevel:
             stat["importance_weight"][4:8], expected_ratio_seq2.expand(4), atol=1e-5
         )
 
-    def test_sequence_level_advantage_summing_2d(self):
-        """Test that advantages are summed per sequence for 2D tensors."""
+    def test_sequence_level_advantage_averaging_2d(self):
+        """Test that advantages are averaged per sequence for 2D tensors."""
         batch_size = 2
         seq_len = 4
 
         # Create advantages that vary per token
         advantages = torch.tensor(
             [
-                [1.0, 2.0, 3.0, 4.0],  # sum = 10.0
-                [0.5, 0.5, 0.5, 0.5],  # sum = 2.0
+                [1.0, 2.0, 3.0, 4.0],  # sum = 10.0, mean = 2.5
+                [0.5, 0.5, 0.5, 0.5],  # sum = 2.0, mean = 0.5
             ]
         )
 
@@ -191,7 +191,7 @@ class TestPPOActorLossFnSequenceLevel:
         loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # We'll verify this by checking that the loss is computed correctly
-        # The function should sum advantages across the sequence dimension
+        # The function should average advantages across the sequence dimension
         loss, stat = ppo_actor_loss_fn(
             logprobs=logprobs,
             proximal_logprobs=proximal_logprobs,
@@ -207,9 +207,11 @@ class TestPPOActorLossFnSequenceLevel:
         assert not torch.isnan(loss)
         assert not torch.isinf(loss)
 
-        # With ratio=1, the loss is the negative mean of the sequence-summed advantages.
-        # Expected loss: -((10*4 + 2*4) / 8) = -6.0
-        assert torch.allclose(loss, torch.tensor(-6.0))
+        # With ratio=1, the loss is the negative mean of advantages.
+        # Seq1: mean_adv=2.5, 4 tokens → contributes -2.5 * 4 = -10.0
+        # Seq2: mean_adv=0.5, 4 tokens → contributes -0.5 * 4 = -2.0
+        # Total: (-10.0 + -2.0) / 8 = -1.5
+        assert torch.allclose(loss, torch.tensor(-1.5))
 
     def test_sequence_level_with_mask_2d(self):
         """Test sequence-level with partial masking for 2D tensors."""
@@ -452,16 +454,22 @@ class TestPPOActorLossFnSequenceLevel:
         batch_size = 2
         seq_len = 4
 
-        # Create non-uniform data within sequences
+        # Create non-uniform data within sequences (use smaller values to avoid clipping)
         logprobs = torch.tensor(
             [
-                [1.0, 2.0, 3.0, 4.0],
-                [0.5, 1.5, 2.5, 3.5],
+                [0.1, 0.2, 0.05, 0.15],  # varying per token
+                [0.15, 0.1, 0.2, 0.05],  # different pattern
             ]
         )
         proximal_logprobs = torch.zeros(batch_size, seq_len)
         old_logprobs = torch.zeros(batch_size, seq_len)
-        advantages = torch.ones(batch_size, seq_len)
+        # Non-uniform advantages to make the difference clear
+        advantages = torch.tensor(
+            [
+                [1.0, 2.0, 3.0, 4.0],
+                [4.0, 3.0, 2.0, 1.0],
+            ]
+        )
         loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
 
         # Compute sequence-level loss

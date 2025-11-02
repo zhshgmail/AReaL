@@ -174,7 +174,7 @@ def _compute_sequence_level_ratio_and_advantages(
     loss_mask: torch.Tensor,
     cu_seqlens: torch.Tensor | None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute sequence-level geometric mean ratios and sum advantages per sequence (GSPO).
+    """Compute sequence-level geometric mean ratios and average advantages per sequence (GSPO).
 
     Args:
         log_ratio: Log of probability ratios (logprobs - proximal_logprobs)
@@ -185,8 +185,11 @@ def _compute_sequence_level_ratio_and_advantages(
             For a single sequence, use cu_seqlens=torch.tensor([0, seq_len]).
 
     Returns:
-        ratio: Sequence-level importance sampling ratios
-        advantages: Sequence-summed advantages broadcast to token level
+        ratio: Sequence-level importance sampling ratios (broadcast to all tokens)
+        advantages: Sequence-averaged advantages (broadcast to all tokens)
+            Note: We use mean instead of sum to keep gradient magnitude independent
+            of sequence length. When multiplied by ratio and summed over tokens,
+            this gives the correct total gradient contribution per sequence.
     """
     # Handle both 1D (packed) and 2D (padded) tensor shapes
     if log_ratio.ndim == 1:
@@ -203,8 +206,8 @@ def _compute_sequence_level_ratio_and_advantages(
 
         # Initialize ratio tensor with zeros
         ratio = torch.zeros_like(log_ratio)
-        # Initialize advantages_summed for later use
-        advantages_summed = torch.zeros_like(advantages)
+        # Initialize advantages_averaged for later use
+        advantages_averaged = torch.zeros_like(advantages)
 
         # Compute geometric mean ratio for each sequence
         for i in range(batch_size):
@@ -223,12 +226,13 @@ def _compute_sequence_level_ratio_and_advantages(
             seq_ratio = torch.exp(seq_log_ratio_mean)
             ratio[start_idx:end_idx] = torch.where(seq_mask, seq_ratio, 0.0)
 
-            # Sum advantages for this sequence
-            seq_adv_sum = torch.where(seq_mask, seq_advantages, 0.0).sum()
-            advantages_summed[start_idx:end_idx] = torch.where(seq_mask, seq_adv_sum, 0.0)
+            # Average advantages across the sequence
+            # This ensures gradient magnitude is independent of sequence length
+            seq_adv_mean = torch.where(seq_mask, seq_advantages, 0.0).sum() / valid_count
+            advantages_averaged[start_idx:end_idx] = torch.where(seq_mask, seq_adv_mean, 0.0)
 
-        # Use summed advantages
-        advantages = advantages_summed
+        # Use averaged advantages
+        advantages = advantages_averaged
     else:
         # For 2D tensors (padded sequences)
         # Input shape: [batch_size, seq_len]
@@ -241,9 +245,10 @@ def _compute_sequence_level_ratio_and_advantages(
         # Apply mask
         ratio = torch.where(loss_mask, ratio, 0.0)
 
-        # Sum token advantages per sequence
-        # Use sum instead of mean because later we divide by total valid tokens
-        advantages = advantages.sum(dim=-1, keepdim=True).expand_as(log_ratio)
+        # Average token advantages per sequence
+        # This ensures gradient magnitude is independent of sequence length
+        seq_lengths = loss_mask.sum(dim=-1, keepdim=True).clamp(min=1)
+        advantages = (advantages.sum(dim=-1, keepdim=True) / seq_lengths).expand_as(log_ratio)
 
     return ratio, advantages
 
