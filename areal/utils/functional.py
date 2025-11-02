@@ -10,11 +10,14 @@ from megatron.core import parallel_state as mpu
 from megatron.core import tensor_parallel
 
 from areal.platforms import is_npu_available
+from areal.utils import logging
 from areal.utils.mcore.functional import _VocabParallelEntropy
 from areal.utils.ulysses import (
     get_ulysses_sequence_parallel_group,
     get_ulysses_sequence_parallel_world_size,
 )
+
+logger = logging.getLogger("gspo_debug")
 
 
 def _gather_logprobs(
@@ -204,6 +207,11 @@ def _compute_sequence_level_ratio_and_advantages(
         # Packed sequences: use cu_seqlens boundaries
         batch_size = cu_seqlens.shape[0] - 1
 
+        # DEBUG: Log initial state
+        logger.info(f"[GSPO DEBUG] Packed sequences: batch_size={batch_size}, total_tokens={log_ratio.shape[0]}")
+        logger.info(f"[GSPO DEBUG] Input advantages: mean={advantages.mean().item():.6f}, std={advantages.std().item():.6f}, min={advantages.min().item():.6f}, max={advantages.max().item():.6f}")
+        logger.info(f"[GSPO DEBUG] Input log_ratios: mean={log_ratio.mean().item():.6f}, std={log_ratio.std().item():.6f}, min={log_ratio.min().item():.6f}, max={log_ratio.max().item():.6f}")
+
         # Initialize ratio tensor with zeros
         ratio = torch.zeros_like(log_ratio)
         # Initialize advantages_averaged for later use
@@ -231,8 +239,22 @@ def _compute_sequence_level_ratio_and_advantages(
             seq_adv_mean = torch.where(seq_mask, seq_advantages, 0.0).sum() / valid_count
             advantages_averaged[start_idx:end_idx] = torch.where(seq_mask, seq_adv_mean, 0.0)
 
+            # DEBUG: Log first 3 sequences in detail
+            if i < 3:
+                seq_len = end_idx - start_idx
+                orig_adv_sum = torch.where(seq_mask, seq_advantages, 0.0).sum().item()
+                logger.info(f"[GSPO DEBUG] Seq {i}: len={seq_len}, valid_tokens={valid_count.item()}")
+                logger.info(f"[GSPO DEBUG]   Original advantages: sum={orig_adv_sum:.4f}, mean={seq_advantages.mean().item():.4f}, min={seq_advantages.min().item():.4f}, max={seq_advantages.max().item():.4f}")
+                logger.info(f"[GSPO DEBUG]   Averaged advantage (broadcast): {seq_adv_mean.item():.6f}")
+                logger.info(f"[GSPO DEBUG]   Log ratio mean: {seq_log_ratio_mean.item():.6f}")
+                logger.info(f"[GSPO DEBUG]   Sequence ratio (broadcast): {seq_ratio.item():.6f}")
+
         # Use averaged advantages
         advantages = advantages_averaged
+
+        # DEBUG: Log output state
+        logger.info(f"[GSPO DEBUG] Output advantages: mean={advantages.mean().item():.6f}, std={advantages.std().item():.6f}, min={advantages.min().item():.6f}, max={advantages.max().item():.6f}")
+        logger.info(f"[GSPO DEBUG] Output ratios: mean={ratio.mean().item():.6f}, std={ratio.std().item():.6f}, min={ratio.min().item():.6f}, max={ratio.max().item():.6f}")
     else:
         # For 2D tensors (padded sequences)
         # Input shape: [batch_size, seq_len]
@@ -288,9 +310,22 @@ def ppo_actor_loss_fn(
     if importance_sampling_level == "sequence":
         # GSPO: Compute sequence-level geometric mean of probability ratios
         log_ratio = logprobs - proximal_logprobs
+
+        # DEBUG: Log before sequence-level computation
+        logger.info(f"[GSPO DEBUG] === ENTERING SEQUENCE-LEVEL COMPUTATION ===")
+        logger.info(f"[GSPO DEBUG] logprobs: mean={logprobs.mean().item():.6f}, std={logprobs.std().item():.6f}")
+        logger.info(f"[GSPO DEBUG] proximal_logprobs: mean={proximal_logprobs.mean().item():.6f}, std={proximal_logprobs.std().item():.6f}")
+        logger.info(f"[GSPO DEBUG] advantages (input): mean={advantages.mean().item():.6f}, std={advantages.std().item():.6f}")
+
         ratio, advantages = _compute_sequence_level_ratio_and_advantages(
             log_ratio, advantages, loss_mask, cu_seqlens
         )
+
+        # DEBUG: Log after sequence-level computation
+        logger.info(f"[GSPO DEBUG] === AFTER SEQUENCE-LEVEL COMPUTATION ===")
+        logger.info(f"[GSPO DEBUG] advantages (modified): mean={advantages.mean().item():.6f}, std={advantages.std().item():.6f}")
+        logger.info(f"[GSPO DEBUG] ratio: mean={ratio.mean().item():.6f}, std={ratio.std().item():.6f}")
+
     elif importance_sampling_level == "token":
         # Standard PPO: per-token ratio
         ratio = torch.where(loss_mask, torch.exp(logprobs - proximal_logprobs), 0)
@@ -308,6 +343,12 @@ def ppo_actor_loss_fn(
 
     pg_loss1 = -advantages * ratio
     pg_loss2 = -advantages * clipped_ratio
+
+    # DEBUG: Log loss computation
+    if importance_sampling_level == "sequence":
+        logger.info(f"[GSPO DEBUG] === LOSS COMPUTATION ===")
+        logger.info(f"[GSPO DEBUG] pg_loss1 (-adv * ratio): mean={pg_loss1.mean().item():.6f}, std={pg_loss1.std().item():.6f}, min={pg_loss1.min().item():.6f}, max={pg_loss1.max().item():.6f}")
+        logger.info(f"[GSPO DEBUG] pg_loss2 (-adv * clipped_ratio): mean={pg_loss2.mean().item():.6f}, std={pg_loss2.std().item():.6f}")
     clip_mask = pg_loss1.detach() < pg_loss2.detach()
     pg_loss = torch.max(pg_loss1, pg_loss2)
     if c_clip is not None:
@@ -329,6 +370,14 @@ def ppo_actor_loss_fn(
     pg_loss = pg_loss * behav_imp_weight
     logging_loss = pg_loss.detach()
     pg_loss = torch.where(loss_mask, pg_loss, 0).sum() / loss_mask_count
+
+    # DEBUG: Log final loss
+    if importance_sampling_level == "sequence":
+        logger.info(f"[GSPO DEBUG] === FINAL LOSS ===")
+        logger.info(f"[GSPO DEBUG] logging_loss (per-token, for stats): mean={logging_loss.mean().item():.6f}, std={logging_loss.std().item():.6f}, min={logging_loss.min().item():.6f}, max={logging_loss.max().item():.6f}")
+        logger.info(f"[GSPO DEBUG] pg_loss (scalar, for backward): {pg_loss.item():.6f}")
+        logger.info(f"[GSPO DEBUG] loss_mask_count: {loss_mask_count}")
+
     clip_mask.logical_and_(loss_mask)
     dual_clip_mask.logical_and_(loss_mask)
     stat = dict(
