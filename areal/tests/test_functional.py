@@ -759,3 +759,274 @@ class TestPPOActorLossFnEdgeCases:
         # Verify all valid tokens have same ratio (same sequence)
         valid_ratios = stat["importance_weight"][0, :7]
         assert torch.allclose(valid_ratios, valid_ratios[0].expand(7), atol=1e-5)
+
+
+class TestDClampPPO:
+    """Test cases for DClamp-PPO functionality."""
+
+    @pytest.fixture
+    def basic_data(self):
+        """Basic test data for DClamp-PPO tests."""
+        batch_size = 4
+        seq_len = 8
+
+        return {
+            "logprobs": torch.randn(batch_size, seq_len),
+            "proximal_logprobs": torch.randn(batch_size, seq_len),
+            "old_logprobs": torch.randn(batch_size, seq_len),
+            "advantages": torch.randn(batch_size, seq_len),
+            "loss_mask": torch.ones(batch_size, seq_len, dtype=torch.bool),
+            "eps_clip": 0.2,
+        }
+
+    def test_dclamp_disabled_by_default(self, basic_data):
+        """Test that DClamp-PPO is disabled when dclamp_alpha is None."""
+        loss, stat = ppo_actor_loss_fn(
+            logprobs=basic_data["logprobs"],
+            proximal_logprobs=basic_data["proximal_logprobs"],
+            old_logprobs=basic_data["old_logprobs"],
+            advantages=basic_data["advantages"],
+            eps_clip=basic_data["eps_clip"],
+            loss_mask=basic_data["loss_mask"],
+            dclamp_alpha=None,  # Disabled
+        )
+
+        # Should have dclamp_mask (all zeros when disabled)
+        assert "dclamp_mask" in stat
+        assert not stat["dclamp_mask"].any()  # All False
+
+    def test_dclamp_basic_shape(self, basic_data):
+        """Test that DClamp-PPO returns correct shapes."""
+        loss, stat = ppo_actor_loss_fn(
+            logprobs=basic_data["logprobs"],
+            proximal_logprobs=basic_data["proximal_logprobs"],
+            old_logprobs=basic_data["old_logprobs"],
+            advantages=basic_data["advantages"],
+            eps_clip=basic_data["eps_clip"],
+            loss_mask=basic_data["loss_mask"],
+            dclamp_alpha=3.0,
+            dclamp_beta=0.2,
+        )
+
+        # Loss should be scalar
+        assert loss.ndim == 0
+        assert loss.dtype == torch.float32
+
+        # Stats should have correct shapes
+        assert stat["dclamp_mask"].shape == basic_data["logprobs"].shape
+        assert stat["dclamp_mask"].dtype == torch.bool
+
+    def test_dclamp_beta_defaults_to_eps_clip(self):
+        """Test that dclamp_beta defaults to eps_clip when not specified."""
+        batch_size = 2
+        seq_len = 4
+        eps_clip = 0.2
+
+        # Create data where we know the ratio behavior
+        logprobs = torch.zeros(batch_size, seq_len)
+        proximal_logprobs = torch.zeros(batch_size, seq_len)
+        old_logprobs = torch.zeros(batch_size, seq_len)
+        advantages = torch.ones(batch_size, seq_len)
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # Call with dclamp_alpha but no dclamp_beta
+        loss, stat = ppo_actor_loss_fn(
+            logprobs=logprobs,
+            proximal_logprobs=proximal_logprobs,
+            old_logprobs=old_logprobs,
+            advantages=advantages,
+            eps_clip=eps_clip,
+            loss_mask=loss_mask,
+            dclamp_alpha=3.0,
+            dclamp_beta=None,  # Should default to eps_clip
+        )
+
+        # Should work without error
+        assert not torch.isnan(loss)
+        assert not torch.isinf(loss)
+
+    def test_dclamp_strict_wrong_direction_positive_advantage(self):
+        """Test DClamp penalty for strict wrong direction with positive advantage."""
+        batch_size = 2
+        seq_len = 4
+
+        # Create scenario where ratio < 1 - beta with positive advantage
+        # This is strict wrong direction
+        logprobs = torch.full((batch_size, seq_len), -1.0)  # Low logprobs
+        proximal_logprobs = torch.zeros(batch_size, seq_len)
+        old_logprobs = torch.zeros(batch_size, seq_len)
+        advantages = torch.ones(batch_size, seq_len)  # Positive advantages
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # ratio = exp(-1.0) ≈ 0.368, which is < 1 - 0.2 = 0.8
+        # So this is in strict wrong direction
+
+        loss_standard, stat_standard = ppo_actor_loss_fn(
+            logprobs=logprobs.clone(),
+            proximal_logprobs=proximal_logprobs.clone(),
+            old_logprobs=old_logprobs.clone(),
+            advantages=advantages.clone(),
+            eps_clip=0.2,
+            loss_mask=loss_mask.clone(),
+            dclamp_alpha=None,  # Standard PPO
+        )
+
+        loss_dclamp, stat_dclamp = ppo_actor_loss_fn(
+            logprobs=logprobs.clone(),
+            proximal_logprobs=proximal_logprobs.clone(),
+            old_logprobs=old_logprobs.clone(),
+            advantages=advantages.clone(),
+            eps_clip=0.2,
+            loss_mask=loss_mask.clone(),
+            dclamp_alpha=3.0,
+            dclamp_beta=0.2,
+        )
+
+        # DClamp should apply penalty, making loss different
+        # (and typically higher to discourage wrong direction)
+        assert not torch.allclose(loss_standard, loss_dclamp, atol=1e-6)
+
+    def test_dclamp_strict_wrong_direction_negative_advantage(self):
+        """Test DClamp penalty for strict wrong direction with negative advantage."""
+        batch_size = 2
+        seq_len = 4
+
+        # Create scenario where ratio > 1 + beta with negative advantage
+        # This is strict wrong direction
+        logprobs = torch.full((batch_size, seq_len), 1.0)  # High logprobs
+        proximal_logprobs = torch.zeros(batch_size, seq_len)
+        old_logprobs = torch.zeros(batch_size, seq_len)
+        advantages = -torch.ones(batch_size, seq_len)  # Negative advantages
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # ratio = exp(1.0) ≈ 2.718, which is > 1 + 0.2 = 1.2
+        # So this is in strict wrong direction
+
+        loss_standard, stat_standard = ppo_actor_loss_fn(
+            logprobs=logprobs.clone(),
+            proximal_logprobs=proximal_logprobs.clone(),
+            old_logprobs=old_logprobs.clone(),
+            advantages=advantages.clone(),
+            eps_clip=0.2,
+            loss_mask=loss_mask.clone(),
+            dclamp_alpha=None,
+        )
+
+        loss_dclamp, stat_dclamp = ppo_actor_loss_fn(
+            logprobs=logprobs.clone(),
+            proximal_logprobs=proximal_logprobs.clone(),
+            old_logprobs=old_logprobs.clone(),
+            advantages=advantages.clone(),
+            eps_clip=0.2,
+            loss_mask=loss_mask.clone(),
+            dclamp_alpha=3.0,
+            dclamp_beta=0.2,
+        )
+
+        # DClamp should apply penalty
+        assert not torch.allclose(loss_standard, loss_dclamp, atol=1e-6)
+
+    def test_dclamp_no_penalty_right_direction(self):
+        """Test that DClamp doesn't penalize in right direction."""
+        batch_size = 2
+        seq_len = 4
+
+        # Create scenario where ratio > 1 with positive advantage (right direction)
+        logprobs = torch.full((batch_size, seq_len), 0.5)
+        proximal_logprobs = torch.zeros(batch_size, seq_len)
+        old_logprobs = torch.zeros(batch_size, seq_len)
+        advantages = torch.ones(batch_size, seq_len)  # Positive advantages
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # ratio = exp(0.5) ≈ 1.649, which is in right direction
+
+        loss, stat = ppo_actor_loss_fn(
+            logprobs=logprobs,
+            proximal_logprobs=proximal_logprobs,
+            old_logprobs=old_logprobs,
+            advantages=advantages,
+            eps_clip=0.2,
+            loss_mask=loss_mask,
+            dclamp_alpha=3.0,
+            dclamp_beta=0.2,
+        )
+
+        # Should work without error
+        assert not torch.isnan(loss)
+        assert not torch.isinf(loss)
+
+    def test_dclamp_with_dual_clip(self):
+        """Test that DClamp-PPO works with dual clipping (c_clip)."""
+        batch_size = 2
+        seq_len = 4
+
+        logprobs = torch.randn(batch_size, seq_len)
+        proximal_logprobs = torch.randn(batch_size, seq_len)
+        old_logprobs = torch.randn(batch_size, seq_len)
+        advantages = torch.randn(batch_size, seq_len)
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        loss, stat = ppo_actor_loss_fn(
+            logprobs=logprobs,
+            proximal_logprobs=proximal_logprobs,
+            old_logprobs=old_logprobs,
+            advantages=advantages,
+            eps_clip=0.2,
+            loss_mask=loss_mask,
+            c_clip=3.0,  # Dual clip
+            dclamp_alpha=3.0,  # DClamp
+            dclamp_beta=0.2,
+        )
+
+        # Both features should work together
+        assert "dual_clip_mask" in stat
+        assert "dclamp_mask" in stat
+        assert not torch.isnan(loss)
+        assert not torch.isinf(loss)
+
+    def test_dclamp_alpha_validation(self):
+        """Test that dclamp_alpha must be > 1.0."""
+        batch_size = 2
+        seq_len = 4
+
+        logprobs = torch.randn(batch_size, seq_len)
+        proximal_logprobs = torch.randn(batch_size, seq_len)
+        old_logprobs = torch.randn(batch_size, seq_len)
+        advantages = torch.randn(batch_size, seq_len)
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # Should fail with alpha <= 1.0
+        with pytest.raises(AssertionError):
+            ppo_actor_loss_fn(
+                logprobs=logprobs,
+                proximal_logprobs=proximal_logprobs,
+                old_logprobs=old_logprobs,
+                advantages=advantages,
+                eps_clip=0.2,
+                loss_mask=loss_mask,
+                dclamp_alpha=0.5,  # Invalid
+            )
+
+    def test_dclamp_beta_validation(self):
+        """Test that dclamp_beta must be in (0, 1]."""
+        batch_size = 2
+        seq_len = 4
+
+        logprobs = torch.randn(batch_size, seq_len)
+        proximal_logprobs = torch.randn(batch_size, seq_len)
+        old_logprobs = torch.randn(batch_size, seq_len)
+        advantages = torch.randn(batch_size, seq_len)
+        loss_mask = torch.ones(batch_size, seq_len, dtype=torch.bool)
+
+        # Should fail with beta > 1.0
+        with pytest.raises(AssertionError):
+            ppo_actor_loss_fn(
+                logprobs=logprobs,
+                proximal_logprobs=proximal_logprobs,
+                old_logprobs=old_logprobs,
+                advantages=advantages,
+                eps_clip=0.2,
+                loss_mask=loss_mask,
+                dclamp_alpha=3.0,
+                dclamp_beta=1.5,  # Invalid
+            )

@@ -274,6 +274,8 @@ def ppo_actor_loss_fn(
     behav_imp_weight_cap: float | None = None,
     importance_sampling_level: str = "token",
     cu_seqlens: torch.Tensor | None = None,
+    dclamp_alpha: float | None = None,
+    dclamp_beta: float | None = None,
 ) -> tuple[torch.Tensor, dict]:
     """
     When decoupled loss is disabled:
@@ -291,6 +293,13 @@ def ppo_actor_loss_fn(
             Required when inputs are 1D and importance_sampling_level='sequence'.
             Shape: [batch_size + 1], where cu_seqlens[i] marks the start of sequence i.
             Not needed for 2D padded inputs (sequences identified by batch dimension).
+        dclamp_alpha: DClamp-PPO alpha parameter (slope of penalty in strict wrong direction).
+            Must be > 1.0. If None, DClamp-PPO is disabled (standard PPO).
+        dclamp_beta: DClamp-PPO beta parameter (defines strict wrong direction region).
+            Must be in (0, 1]. If None and dclamp_alpha is set, defaults to eps_clip.
+            Strict wrong direction is defined as:
+            - For positive advantages: ratio < 1 - beta
+            - For negative advantages: ratio > 1 + beta
     """
     loss_mask_count = loss_mask.count_nonzero() or 1
 
@@ -319,6 +328,8 @@ def ppo_actor_loss_fn(
     pg_loss2 = -advantages * clipped_ratio
     clip_mask = pg_loss1.detach() < pg_loss2.detach()
     pg_loss = torch.max(pg_loss1, pg_loss2)
+
+    # Dual clipping (existing feature)
     if c_clip is not None:
         assert c_clip > 1.0, c_clip
         pg_loss3 = torch.sign(advantages) * c_clip * advantages
@@ -326,6 +337,33 @@ def ppo_actor_loss_fn(
         pg_loss = torch.min(pg_loss, pg_loss3)
     else:
         dual_clip_mask = torch.zeros_like(clip_mask)
+
+    # DClamp-PPO: Apply penalty in strict wrong direction regions
+    dclamp_mask = torch.zeros_like(clip_mask)
+    if dclamp_alpha is not None:
+        assert dclamp_alpha > 1.0, f"dclamp_alpha must be > 1.0, got {dclamp_alpha}"
+        # Default beta to eps_clip if not specified
+        beta = dclamp_beta if dclamp_beta is not None else eps_clip
+        assert 0 < beta <= 1.0, f"dclamp_beta must be in (0, 1], got {beta}"
+
+        # Compute f_DClamp(w, α, β) based on advantage sign
+        # For positive advantages: f_DClamp = α * w - (α - 1) * (1 - β)
+        # For negative advantages: f_DClamp = α * w - (α - 1) * (1 + β)
+        dclamp_ratio = torch.where(
+            advantages > 0,
+            dclamp_alpha * ratio - (dclamp_alpha - 1) * (1 - beta),
+            dclamp_alpha * ratio - (dclamp_alpha - 1) * (1 + beta),
+        )
+
+        # DClamp loss: -advantages * f_DClamp(ratio)
+        pg_loss_dclamp = -advantages * dclamp_ratio
+
+        # Track which samples are affected by DClamp
+        dclamp_mask = pg_loss_dclamp.detach() < pg_loss.detach()
+
+        # Apply DClamp: min of standard PPO loss and DClamp loss
+        # This means max of negative losses (since loss = -objective)
+        pg_loss = torch.max(pg_loss, pg_loss_dclamp)
     behav_kl = proximal_logprobs - old_logprobs
     behav_imp_weight = behav_kl.exp()
     behav_mask = (
@@ -340,12 +378,14 @@ def ppo_actor_loss_fn(
     pg_loss = torch.where(loss_mask, pg_loss, 0).sum() / loss_mask_count
     clip_mask.logical_and_(loss_mask)
     dual_clip_mask.logical_and_(loss_mask)
+    dclamp_mask.logical_and_(loss_mask)
     stat = dict(
         loss=logging_loss,
         importance_weight=ratio.detach(),
         approx_kl=(logprobs - proximal_logprobs).detach(),
         clip_mask=clip_mask,
         dual_clip_mask=dual_clip_mask,
+        dclamp_mask=dclamp_mask,
     )
     if proximal_logprobs is not None:
         stat["behave_imp_weight"] = behav_imp_weight

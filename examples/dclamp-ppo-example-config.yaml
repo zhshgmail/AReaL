@@ -1,0 +1,114 @@
+# Example configuration for DClamp-PPO
+# Based on the paper: "Directional-Clamp PPO" (https://arxiv.org/pdf/2511.02577)
+#
+# DClamp-PPO addresses a key limitation of standard PPO: during training, a significant
+# proportion of importance ratios drift in the "wrong direction" (decreasing probability
+# of advantageous actions or increasing probability of disadvantageous ones).
+#
+# DClamp-PPO introduces two hyperparameters:
+# - dclamp_alpha: Controls the slope of the penalty in strict wrong direction regions (must be > 1.0)
+# - dclamp_beta: Defines the strict wrong direction region (must be in (0, 1])
+#
+# Recommended values from the paper:
+# - dclamp_alpha: 3.0
+# - dclamp_beta: Same as eps_clip (e.g., 0.2)
+
+experiment_name: dclamp-ppo-example
+trial_name: trial
+cluster:
+  n_nodes: 1
+  n_gpus_per_node: 2
+  fileroot: /tmp/areal/experiments
+allocation_mode: sglang:d1p1t1+d1p1t1
+seed: 1
+total_train_epochs: 1
+total_train_steps: 16
+tokenizer_path: ${actor.path}
+train_dataset:
+  path: openai/gsm8k
+  batch_size: 64
+  max_length: 512
+  type: rl
+saver:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  fileroot: ${cluster.fileroot}
+evaluator:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  fileroot: ${cluster.fileroot}
+stats_logger:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  fileroot: ${cluster.fileroot}
+recover:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  fileroot: ${cluster.fileroot}
+sglang:
+  model_path: ${actor.path}
+  random_seed: ${seed}
+launcher: {}
+gconfig:
+  n_samples: 4
+  max_new_tokens: 1024
+
+rollout:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  consumer_batch_size: ${train_dataset.batch_size}
+
+actor:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  path: Qwen/Qwen3-0.6B
+  mb_spec:
+    max_tokens_per_mb: 4096
+  optimizer:
+    type: adam
+    lr: 1.70e-5
+    weight_decay: 0.017
+    beta1: 0.9
+    beta2: 0.999
+    eps: 1e-8
+    lr_scheduler_type: constant
+    gradient_clipping: 1.0
+    warmup_steps_proportion: 0.001
+  group_size: ${gconfig.n_samples}
+
+  # Standard PPO parameters
+  eps_clip: 0.2
+
+  # ========================================
+  # DClamp-PPO Configuration
+  # ========================================
+  # Enable DClamp-PPO by setting dclamp_alpha > 1.0
+  # This applies a steeper penalty in "strict wrong direction" regions
+  dclamp_alpha: 3.0
+
+  # Define the strict wrong direction region
+  # If not specified, defaults to eps_clip
+  # Strict wrong direction is defined as:
+  #   - For positive advantages: ratio < 1 - dclamp_beta
+  #   - For negative advantages: ratio > 1 + dclamp_beta
+  dclamp_beta: 0.2
+  # ========================================
+
+  adv_norm:
+    mean_level: batch
+    std_level: batch
+
+ref:
+  experiment_name: ${experiment_name}
+  trial_name: ${trial_name}
+  path: ${actor.path}
+  mb_spec:
+    max_tokens_per_mb: 4096
+
+# Notes on DClamp-PPO usage:
+# 1. To disable DClamp-PPO, simply omit dclamp_alpha or set it to null
+# 2. dclamp_alpha controls the strength of the penalty (paper recommends 3.0)
+# 3. dclamp_beta controls the region where the penalty applies (paper recommends using eps_clip)
+# 4. DClamp-PPO is compatible with other PPO variants like dual clipping (c_clip) and
+#    decoupled loss (use_decoupled_loss)
+# 5. Monitor the 'dclamp_tokens' metric in training logs to see how often the penalty is applied

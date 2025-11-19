@@ -470,6 +470,19 @@ class PPOActorConfig(TrainEngineConfig):
             "help": "Dual clipping factor for policy ratio, must be > 1.0. None disables dual clipping."
         },
     )
+    # DClamp-PPO Parameters
+    dclamp_alpha: float | None = field(
+        default=None,
+        metadata={
+            "help": "DClamp-PPO alpha parameter (slope of penalty in strict wrong direction), must be > 1.0. None disables DClamp-PPO."
+        },
+    )
+    dclamp_beta: float | None = field(
+        default=None,
+        metadata={
+            "help": "DClamp-PPO beta parameter (defines strict wrong direction region), must be in (0, 1). If None and dclamp_alpha is set, defaults to eps_clip."
+        },
+    )
     temperature: float = field(
         default=1.0, metadata={"help": "Temperature during generation."}
     )

@@ -254,6 +254,16 @@ class PPOActor:
             scalars["use_dual_clip"] = 0
         if self.config.behav_imp_weight_cap is not None:
             scalars["behav_imp_weight_cap"] = self.config.behav_imp_weight_cap
+        if self.config.dclamp_alpha is not None:
+            scalars["dclamp_alpha"] = self.config.dclamp_alpha
+            scalars["dclamp_beta"] = (
+                self.config.dclamp_beta
+                if self.config.dclamp_beta is not None
+                else self.config.eps_clip
+            )
+            scalars["use_dclamp"] = 1
+        else:
+            scalars["use_dclamp"] = 0
         stats_tracker.scalar(**scalars)
 
         if self.config.log_agent_stats:
@@ -285,6 +295,8 @@ class PPOActor:
                         behav_imp_weight_cap=self.config.behav_imp_weight_cap,
                         m2_threshold=self.m2_threshold,
                         importance_sampling_level=self.config.importance_sampling_level,
+                        dclamp_alpha=self.config.dclamp_alpha,
+                        dclamp_beta=self.config.dclamp_beta,
                     ),
                     loss_weight_fn=lambda x: x["loss_mask"].count_nonzero(),
                 )
@@ -335,6 +347,8 @@ def grpo_loss_fn(
     behav_imp_weight_cap: float | None,
     m2_threshold: float | None = None,
     importance_sampling_level: str = "token",
+    dclamp_alpha: float | None = None,
+    dclamp_beta: float | None = None,
 ):
     """Loss function for actor step, all inputs should be splitted into
     pipeline micro batches, returns loss and logging stats."""
@@ -386,6 +400,8 @@ def grpo_loss_fn(
         behav_imp_weight_cap=behav_imp_weight_cap,
         importance_sampling_level=importance_sampling_level,
         cu_seqlens=input_data.get("cu_seqlens"),
+        dclamp_alpha=dclamp_alpha,
+        dclamp_beta=dclamp_beta,
     )
 
     # Log training statistics
@@ -394,6 +410,7 @@ def grpo_loss_fn(
         n_valid_tokens=loss_mask.bool(),
         clipped_tokens=stat["clip_mask"],
         dual_clipped_tokens=stat["dual_clip_mask"],
+        dclamp_tokens=stat["dclamp_mask"],
     )
 
     stats_tracker.stat(
