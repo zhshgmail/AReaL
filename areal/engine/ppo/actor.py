@@ -253,13 +253,7 @@ class PPOActor:
     def compute_logp(
         self,
         data: dict[str, Any],
-    ) -> torch.Tensor | None:
-        # Skip expensive forward pass if using approximation without recomputation
-        # This happens when user scripts call compute_logp() but we don't actually need it
-        # Return None to signal that the value should not be used
-        if self.config.use_prox_approx and not self.config.recompute_logprob:
-            return None  # User script will set batch["prox_logp"] = None
-
+    ) -> torch.Tensor:
         def calc_logprobs(logits, input_data):
             labels = input_data.get(
                 "rolled_input_ids",
@@ -501,7 +495,7 @@ class FSDPPPOActor(FSDPEngine):
         self.actor = PPOActor(config, self)
 
     @torch.no_grad()
-    def compute_logp(self, *args, **kwargs) -> torch.Tensor | None:
+    def compute_logp(self, *args, **kwargs) -> torch.Tensor:
         return self.actor.compute_logp(*args, **kwargs)
 
     @torch.no_grad()
@@ -518,7 +512,7 @@ class MegatronPPOActor(MegatronEngine):
         self.actor = PPOActor(config, self)
 
     @torch.no_grad()
-    def compute_logp(self, *args, **kwargs) -> torch.Tensor | None:
+    def compute_logp(self, *args, **kwargs) -> torch.Tensor:
         return self.actor.compute_logp(*args, **kwargs)
 
     @torch.no_grad()

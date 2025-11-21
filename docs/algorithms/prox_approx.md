@@ -24,7 +24,7 @@ where $v$ denotes the policy version when each token was generated.
 - **27% faster training**: Eliminates one full forward pass per step (163 min vs 207 min for 300 steps)
 - **Better evaluation reward**: Achieves 0.799 vs 0.795 on GSM8K
 - **Comparable task reward**: 0.937 vs 0.954 (within 2%)
-- **Zero user script changes**: Works automatically with existing decoupled PPO code
+- **Minimal user script changes**: Only requires explicit skip logic in user training scripts
 
 ## Algorithm Core Parameters
 
@@ -56,6 +56,26 @@ actor:
   prox_approx_method: harmonic
   recompute_logprob: false  # Skip forward pass entirely
   log_prox_approx_metrics: false
+```
+
+**Important**: User scripts must explicitly control `compute_logp()` calls. When using approximation without recomputation, skip calling `compute_logp()` and set `batch["prox_logp"] = None`. Example:
+
+```python
+# Skip forward pass when using approximation without recomputation
+skip_compute_logp = (
+    config.actor.use_decoupled_loss
+    and config.actor.use_prox_approx
+    and not config.actor.recompute_logprob
+)
+if not skip_compute_logp and (
+    config.actor.recompute_logprob or config.actor.use_decoupled_loss
+):
+    with stats_tracker.record_timing("recompute_logp"):
+        logp = actor.compute_logp(batch)
+        batch["prox_logp"] = logp
+elif skip_compute_logp:
+    # Approximation will be computed automatically in grpo_loss_fn()
+    batch["prox_logp"] = None
 ```
 
 Run with:
@@ -182,8 +202,12 @@ When `log_prox_approx_metrics=true` and `recompute_logprob=true`, the following 
 **Version Tracking:**
 Each generated token carries a version number indicating which policy version generated it. The approximation uses these versions to compute the interpolation weight α.
 
-**Automatic Optimization:**
-When `use_prox_approx=true` and `recompute_logprob=false`, the forward pass is automatically skipped in `compute_logp()`, requiring zero changes to user scripts.
+**Explicit Control in User Scripts:**
+User scripts must explicitly skip `compute_logp()` when using approximation without recomputation. The approximation itself is computed automatically in `grpo_loss_fn()` when `prox_logp=None` and `use_prox_approx=True`. This design:
+- Makes the optimization explicit and visible to users
+- Simplifies conditional logic in `actor.py`
+- Avoids subtle branches that could confuse users
+- Follows the principle suggested by the AReaL team
 
 **Safety Checks:**
 - Validates configuration combinations at initialization
