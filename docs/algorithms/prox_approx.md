@@ -58,23 +58,18 @@ actor:
   log_prox_approx_metrics: false
 ```
 
-**Important**: User scripts must explicitly control `compute_logp()` calls. When using approximation without recomputation, skip calling `compute_logp()` and set `batch["prox_logp"] = None`. Example:
+**Important**: User scripts must explicitly control `compute_logp()` calls based on the `recompute_logprob` setting. Example:
 
 ```python
-# Skip forward pass when using approximation without recomputation
-skip_compute_logp = (
-    config.actor.use_decoupled_loss
-    and config.actor.use_prox_approx
-    and not config.actor.recompute_logprob
-)
-if not skip_compute_logp and (
-    config.actor.recompute_logprob or config.actor.use_decoupled_loss
+# Compute proximal log-probabilities based on recompute_logprob setting
+if config.actor.recompute_logprob or (
+    config.actor.use_decoupled_loss and not config.actor.use_prox_approx
 ):
     with stats_tracker.record_timing("recompute_logp"):
         logp = actor.compute_logp(batch)
         batch["prox_logp"] = logp
-elif skip_compute_logp:
-    # Approximation will be computed automatically in grpo_loss_fn()
+else:
+    # Skip forward pass - approximation computed automatically in grpo_loss_fn()
     batch["prox_logp"] = None
 ```
 
