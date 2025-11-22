@@ -599,6 +599,54 @@ class TestConfigValidation:
         error_msg = str(exc_info.value)
         assert "requires recompute_logprob=True" in error_msg
 
+    def test_all_configuration_combinations(self):
+        """Test all combinations of use_decoupled_loss, use_prox_approx, recompute_logprob."""
+        from unittest.mock import MagicMock
+
+        from areal.api.cli_args import PPOActorConfig
+        from areal.engine.ppo.actor import PPOActor
+
+        # Format: (use_decoupled_loss, use_prox_approx, recompute_logprob, should_succeed, description)
+        test_cases = [
+            # Standard PPO (use_decoupled_loss=False)
+            (False, False, False, True, "Standard PPO: no recompute"),
+            (False, False, True, True, "Standard PPO: with recompute"),
+            (False, True, False, False, "Standard PPO: approx requires decoupled"),
+            (False, True, True, False, "Standard PPO: approx requires decoupled"),
+            # Decoupled PPO without approximation
+            (True, False, False, False, "Decoupled: needs recompute without approx"),
+            (True, False, True, True, "Decoupled: standard with recompute"),
+            # Decoupled PPO with approximation
+            (True, True, False, True, "Decoupled: approximation without recompute"),
+            (True, True, True, False, "Decoupled: approx requires no recompute"),
+        ]
+
+        for use_decoupled, use_approx, recompute, should_succeed, desc in test_cases:
+            config = PPOActorConfig(
+                use_decoupled_loss=use_decoupled,
+                use_prox_approx=use_approx,
+                recompute_logprob=recompute,
+            )
+
+            mock_engine = MagicMock()
+            mock_engine.module.config = MagicMock()
+
+            if should_succeed:
+                # Should create actor successfully
+                try:
+                    _ = PPOActor(config, mock_engine)  # noqa: F841
+                    # Success expected
+                except ValueError as e:
+                    pytest.fail(f"Config should succeed but failed: {desc}\nError: {e}")
+            else:
+                # Should raise ValueError
+                with pytest.raises(ValueError) as exc_info:
+                    PPOActor(config, mock_engine)
+                # Verify error message is informative
+                assert len(str(exc_info.value)) > 50, (
+                    f"Error message too short for: {desc}"
+                )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

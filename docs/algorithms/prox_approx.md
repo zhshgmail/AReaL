@@ -71,24 +71,15 @@ Configuration validation ensures:
 - Decoupled + approximation requires `recompute_logprob=False`
 - Decoupled without approximation requires `recompute_logprob=True`
 
-Run with:
+**Recommended**: Use the new proxy example which supports the simplified pattern:
 ```bash
-python -m areal.launcher.local examples/math/gsm8k_grpo.py \
+python -m areal.launcher.local examples/experimental/proxy/gsm8k_grpo_proxy.py \
   --config examples/experimental/prox_approx/gsm8k_grpo_prox_approx.yaml
 ```
 
-### Evaluation Configuration (With Metrics)
+Note: `examples/math/gsm8k_grpo.py` uses the old pattern and will always recompute for decoupled PPO.
 
-```yaml
-actor:
-  use_decoupled_loss: true
-  use_prox_approx: true
-  prox_approx_method: linear
-  recompute_logprob: true  # Compute ground truth for comparison
-  log_prox_approx_metrics: true  # Log approximation quality metrics
-```
-
-For more examples, see `examples/experimental/prox_approx/`.
+For more configuration examples, see `examples/experimental/prox_approx/`.
 
 ## Baselines
 
