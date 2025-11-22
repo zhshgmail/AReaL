@@ -127,22 +127,21 @@ def pause(self):
 
 **Status:** Requires implementing `_get_num_running_requests()` API.
 
-### Option D: Increase Max Offpolicyness (Temporary Workaround)
+### ~~Option D: Increase Max Offpolicyness~~ (INVALID)
 
-If requests are being rejected due to staleness, increase the window:
-
-```yaml
-rollout:
-  max_head_offpolicyness: 16  # Increase from 8
-```
-
-**Note:** This doesn't fix the race condition, but might reduce frequency.
+**This does NOT help!** `max_head_offpolicyness` only controls future request
+submission, not already-running requests. The 29 running requests that cause the flush
+to fail were already accepted before pause. Increasing this parameter won't help.
 
 ## Recommended Action
 
-1. **Short-term:** Report this issue to SGLang team with reproduction steps
-1. **Medium-term:** Implement Option C (synchronous pause) in AReaL
-1. **Long-term:** Wait for SGLang to add retry logic (Option A)
+**The only real solutions are A, B, or C:**
+
+1. **Short-term workaround:** Implement Option B (add sleep after pause) - quick but
+   hacky
+1. **Medium-term fix:** Implement Option C (synchronous pause) in AReaL - proper fix
+1. **Long-term fix:** Report to SGLang team and wait for Option A (retry logic) - best
+   fix
 
 ## Test Case for SGLang Team
 
