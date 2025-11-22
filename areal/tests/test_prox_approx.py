@@ -553,6 +553,29 @@ class TestConfigValidation:
         # Verify choices match fallback list
         assert set(config_choices) == set(fallback_list)
 
+    def test_approximation_requires_recompute_false(self):
+        """Test that use_prox_approx=True requires recompute_logprob=False."""
+        from unittest.mock import MagicMock
+
+        from areal.api.cli_args import PPOActorConfig
+        from areal.engine.ppo.actor import PPOActor
+
+        # Invalid: approximation with recompute enabled
+        config = PPOActorConfig(
+            use_decoupled_loss=True,
+            use_prox_approx=True,
+            recompute_logprob=True,  # Should fail
+        )
+
+        mock_engine = MagicMock()
+        mock_engine.module.config = MagicMock()
+
+        with pytest.raises(ValueError) as exc_info:
+            PPOActor(config, mock_engine)
+
+        error_msg = str(exc_info.value)
+        assert "use_prox_approx=True requires recompute_logprob=False" in error_msg
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

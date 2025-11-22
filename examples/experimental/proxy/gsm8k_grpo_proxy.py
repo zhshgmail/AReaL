@@ -326,19 +326,11 @@ def main(args):
                 should_accept_fn=lambda sample: True,
             )
 
-        # Compute proximal log-probabilities based on recompute_logprob setting
-        # When recompute_logprob=False with approximation enabled, skip the forward pass
-        # and let grpo_loss_fn() compute approximation automatically
-        if config.actor.recompute_logprob or (
-            config.actor.use_decoupled_loss and not config.actor.use_prox_approx
-        ):
+        if config.actor.recompute_logprob or config.actor.use_decoupled_loss:
             with stats_tracker.record_timing("recompute_logp"):
                 logp = actor.compute_logp(batch)
                 batch["prox_logp"] = logp
                 log_gpu_stats("recompute logp")
-        else:
-            # Skip forward pass - approximation computed automatically in grpo_loss_fn()
-            batch["prox_logp"] = None
 
         if ref is not None:
             with stats_tracker.record_timing("ref_logp"):

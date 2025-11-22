@@ -75,8 +75,20 @@ class PPOActor:
                 "  - Set use_prox_approx=False"
             )
 
-        # Check 2: REMOVED - Allow use_prox_approx=True AND recompute_logprob=True
-        # User may want to recompute ground truth for comparison metrics
+        # Check 2: Decoupled loss with approximation requires recompute_logprob=False
+        # User scripts only check recompute_logprob flag to decide whether to call compute_logp()
+        if (
+            config.use_decoupled_loss
+            and config.use_prox_approx
+            and config.recompute_logprob
+        ):
+            raise ValueError(
+                "use_decoupled_loss=True with use_prox_approx=True requires recompute_logprob=False.\n"
+                "When using approximation, the forward pass should be skipped.\n"
+                "Options:\n"
+                "  - Set recompute_logprob=False to use approximation (skip forward pass)\n"
+                "  - Set use_prox_approx=False to use recomputation (standard decoupled PPO)"
+            )
 
         # Check 3: Validate prox_approx_method is valid
         if config.use_prox_approx:
@@ -109,15 +121,7 @@ class PPOActor:
                 "  - Set log_prox_approx_metrics=False"
             )
 
-        # Warn 1: Clarify recompute_logprob behavior when use_decoupled_loss=True
-        if config.use_decoupled_loss and config.recompute_logprob:
-            logger.warning(
-                "Configuration note: When use_decoupled_loss=True, recompute_logprob does not change which policy is used for the loss calculation.\n"
-                "   It only controls whether to recompute the proximal policy's log-probabilities as ground truth for metrics when approximation is enabled.\n"
-                "   For maximum performance with approximation, set recompute_logprob=False."
-            )
-
-        # Warn 2: prox_approx_method is ignored when use_prox_approx=False
+        # Warn 1: prox_approx_method is ignored when use_prox_approx=False
         if not config.use_prox_approx and hasattr(config, "prox_approx_method"):
             # Only warn if user explicitly set a non-default value
             if config.prox_approx_method != "linear":

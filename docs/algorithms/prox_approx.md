@@ -58,20 +58,16 @@ actor:
   log_prox_approx_metrics: false
 ```
 
-**Important**: User scripts must explicitly control `compute_logp()` calls based on the `recompute_logprob` setting. Example:
+**Important**: User scripts check `recompute_logprob` flag to decide whether to call `compute_logp()`. When using approximation (`use_prox_approx=True`), you MUST set `recompute_logprob=False`. Example:
 
 ```python
-# Compute proximal log-probabilities based on recompute_logprob setting
-if config.actor.recompute_logprob or (
-    config.actor.use_decoupled_loss and not config.actor.use_prox_approx
-):
+if config.actor.recompute_logprob or config.actor.use_decoupled_loss:
     with stats_tracker.record_timing("recompute_logp"):
         logp = actor.compute_logp(batch)
         batch["prox_logp"] = logp
-else:
-    # Skip forward pass - approximation computed automatically in grpo_loss_fn()
-    batch["prox_logp"] = None
 ```
+
+Configuration validation ensures that `use_prox_approx=True` requires `recompute_logprob=False`.
 
 Run with:
 ```bash
@@ -198,10 +194,10 @@ When `log_prox_approx_metrics=true` and `recompute_logprob=true`, the following 
 Each generated token carries a version number indicating which policy version generated it. The approximation uses these versions to compute the interpolation weight α.
 
 **Explicit Control in User Scripts:**
-User scripts must explicitly skip `compute_logp()` when using approximation without recomputation. The approximation itself is computed automatically in `grpo_loss_fn()` when `prox_logp=None` and `use_prox_approx=True`. This design:
+User scripts check the `recompute_logprob` flag to decide whether to call `compute_logp()`. When using approximation (`use_prox_approx=True`), you must set `recompute_logprob=False`, which causes user scripts to skip the forward pass. The approximation itself is computed automatically in `grpo_loss_fn()`. This design:
 - Makes the optimization explicit and visible to users
-- Simplifies conditional logic in `actor.py`
-- Avoids subtle branches that could confuse users
+- Uses existing `recompute_logprob` flag without new parameters
+- Configuration validation catches invalid setups early
 - Follows the principle suggested by the AReaL team
 
 **Safety Checks:**
