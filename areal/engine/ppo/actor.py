@@ -75,20 +75,24 @@ class PPOActor:
                 "  - Set use_prox_approx=False"
             )
 
-        # Check 2: Decoupled loss with approximation requires recompute_logprob=False
-        # User scripts only check recompute_logprob flag to decide whether to call compute_logp()
-        if (
-            config.use_decoupled_loss
-            and config.use_prox_approx
-            and config.recompute_logprob
-        ):
-            raise ValueError(
-                "use_decoupled_loss=True with use_prox_approx=True requires recompute_logprob=False.\n"
-                "When using approximation, the forward pass should be skipped.\n"
-                "Options:\n"
-                "  - Set recompute_logprob=False to use approximation (skip forward pass)\n"
-                "  - Set use_prox_approx=False to use recomputation (standard decoupled PPO)"
-            )
+        # Check 2: Validate recompute_logprob setting for decoupled loss
+        if config.use_decoupled_loss:
+            if config.use_prox_approx and config.recompute_logprob:
+                raise ValueError(
+                    "Invalid configuration: use_decoupled_loss=True with use_prox_approx=True requires recompute_logprob=False.\n"
+                    "When using approximation, the forward pass should be skipped.\n"
+                    "Options:\n"
+                    "  - Set recompute_logprob=False to use approximation (skip forward pass)\n"
+                    "  - Set use_prox_approx=False to use recomputation (standard decoupled PPO)"
+                )
+            if not config.use_prox_approx and not config.recompute_logprob:
+                raise ValueError(
+                    "Invalid configuration: use_decoupled_loss=True without use_prox_approx=True requires recompute_logprob=True.\n"
+                    "Decoupled PPO needs proximal policy log-probabilities.\n"
+                    "Options:\n"
+                    "  - Set recompute_logprob=True to compute ground truth (standard decoupled PPO)\n"
+                    "  - Set use_prox_approx=True with recompute_logprob=False to use approximation"
+                )
 
         # Check 3: Validate prox_approx_method is valid
         if config.use_prox_approx:

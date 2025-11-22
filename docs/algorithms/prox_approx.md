@@ -58,16 +58,18 @@ actor:
   log_prox_approx_metrics: false
 ```
 
-**Important**: User scripts check `recompute_logprob` flag to decide whether to call `compute_logp()`. When using approximation (`use_prox_approx=True`), you MUST set `recompute_logprob=False`. Example:
+**Important**: User scripts check `recompute_logprob` flag to decide whether to call `compute_logp()`:
 
 ```python
-if config.actor.recompute_logprob or config.actor.use_decoupled_loss:
+if config.actor.recompute_logprob:
     with stats_tracker.record_timing("recompute_logp"):
         logp = actor.compute_logp(batch)
         batch["prox_logp"] = logp
 ```
 
-Configuration validation ensures that `use_prox_approx=True` requires `recompute_logprob=False`.
+Configuration validation ensures:
+- Decoupled + approximation requires `recompute_logprob=False`
+- Decoupled without approximation requires `recompute_logprob=True`
 
 Run with:
 ```bash
