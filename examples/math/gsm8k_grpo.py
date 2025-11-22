@@ -156,7 +156,7 @@ def main(args):
                 should_accept_fn=lambda sample: True,
             )
 
-        if config.actor.recompute_logprob:
+        if config.actor.recompute_logprob or config.actor.use_decoupled_loss:
             with stats_tracker.record_timing("recompute_logp"):
                 logp = actor.compute_logp(batch)
                 batch["prox_logp"] = logp
