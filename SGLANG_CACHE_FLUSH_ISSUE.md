@@ -153,8 +153,76 @@ to fail were already accepted before pause. Increasing this parameter won't help
 # 4. Observe: assertion failure due to race condition
 ```
 
+## vLLM Comparison: Does NOT Have This Issue
+
+### vLLM's Implementation (NO Race Condition)
+
+vLLM uses a **synchronous, all-in-one approach** in
+`areal/thirdparty/vllm/areal_vllm_server.py`:
+
+```python
+def abort_all_reqs(self):
+    """Abort all running and waiting requests and clean up resources."""
+    scheduler = self.scheduler
+    abort_lists = list(scheduler.running) + list(scheduler.waiting)
+
+    # Abort all requests
+    for req in abort_lists:
+        engine_output = EngineCoreOutput(
+            request_id=req.request_id,
+            finish_reason=FinishReason.ABORT,
+            ...
+        )
+        client_outputs[req.client_index].append(engine_output)
+
+    # Finish requests synchronously
+    request_ids = [req.request_id for req in abort_lists]
+    scheduler.finish_requests(request_ids, RequestStatus.FINISHED_ABORTED)
+
+    # Flush cache synchronously (raises exception if fails)
+    success = scheduler.reset_prefix_cache()
+    if not success:
+        raise RuntimeError(
+            "Prefix cache must be reset to prevent kv cache pollution!"
+        )
+
+def areal_injected_update_weight_xccl(self):
+    self.abort_all_reqs()  # Does EVERYTHING synchronously
+    return self.collective_rpc("update_weight_xccl")
+```
+
+**Key differences from SGLang:**
+
+| Aspect          | SGLang                               | vLLM                                 |
+| --------------- | ------------------------------------ | ------------------------------------ |
+| Abort execution | Asynchronous (via tokenizer_manager) | **Synchronous** (immediate)          |
+| Cache flush     | Separate call to `flush_cache()`     | **Integrated** in `abort_all_reqs()` |
+| Timing          | Abort → immediate flush → **RACE**   | Abort → finish → flush → **NO RACE** |
+| Error handling  | `assert flush_cache_success`         | `raise RuntimeError` if flush fails  |
+
+**Why vLLM doesn't have the race condition:**
+
+1. `abort_all_reqs()` is a single atomic operation
+1. It completes the abort before attempting cache flush
+1. Cache flush is guaranteed to happen when no requests are running
+1. If cache flush fails, it raises an exception (preventing silent corruption)
+
+### Recommendation
+
+**Switching from SGLang to vLLM backend will avoid this race condition issue.**
+
+The vLLM backend has a more robust implementation that:
+
+- Guarantees cache is flushed after all requests are aborted
+- Provides better error handling
+- Eliminates the race condition entirely
+
+To switch backends, change the engine configuration in the training script from
+`RemoteSGLangEngine` to `RemotevLLMEngine`.
+
 ## References
 
 - SGLang scheduler.py: `update_weights_from_distributed()` at line ~1072
 - SGLang io_struct.py: `UpdateWeightsFromDistributedReqInput` default `flush_cache=True`
+- vLLM implementation: `areal/thirdparty/vllm/areal_vllm_server.py` lines 186-235
 - AReaL issue: Seen at step 240 in BOBA training on H100
