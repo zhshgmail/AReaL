@@ -8,6 +8,10 @@ from areal.api.engine_api import TrainEngine
 from areal.api.io_struct import FinetuneSpec, SaveLoadMeta
 from areal.controller.train_controller import TrainController
 from areal.utils import timeutil
+from areal.utils.checkpoint_retention import (
+    CheckpointRetentionManager,
+    RetentionPolicy,
+)
 
 
 class Saver:
@@ -19,6 +23,8 @@ class Saver:
             freq_step=config.freq_steps,
             freq_sec=config.freq_secs,
         )
+        self._retention_managers: dict[str, CheckpointRetentionManager] = {}
+        self._retention_initialized = False
 
     @staticmethod
     def get_save_root(
@@ -83,6 +89,71 @@ class Saver:
     def load_state_dict(self, state_dict):
         self.freq_ctl.load_state_dict(state_dict)
 
+    def _get_retention_manager(
+        self, name: str = "default"
+    ) -> CheckpointRetentionManager | None:
+        """Get or create retention manager for a model."""
+        if not self.config.enable_retention:
+            return None
+
+        if name not in self._retention_managers:
+            model_save_root = Saver.get_model_save_root(
+                self.config.experiment_name,
+                self.config.trial_name,
+                self.config.fileroot,
+                name,
+            )
+
+            # Determine archive root
+            archive_root = self.config.archive_root
+            if archive_root is None:
+                archive_root = os.path.join(
+                    f"{self.config.fileroot}/checkpoints_archive/{getpass.getuser()}/"
+                    f"{self.config.experiment_name}/{self.config.trial_name}",
+                    name,
+                )
+
+            # Create retention policies
+            epoch_policy = RetentionPolicy(
+                max_to_keep=self.config.epoch_max_to_keep,
+                cleanup_action=self.config.epoch_cleanup_action,
+                archive_root=(
+                    archive_root
+                    if self.config.epoch_cleanup_action != "delete"
+                    else None
+                ),
+                protect=self.config.protect_epoch_checkpoints,
+            )
+
+            step_policy = RetentionPolicy(
+                max_to_keep=self.config.step_max_to_keep,
+                cleanup_action=self.config.step_cleanup_action,
+                archive_root=(
+                    archive_root
+                    if self.config.step_cleanup_action != "delete"
+                    else None
+                ),
+                protect=False,
+            )
+
+            # Create retention manager
+            manager = CheckpointRetentionManager(
+                model_save_root=model_save_root,
+                epoch_policy=epoch_policy,
+                step_policy=step_policy,
+            )
+
+            # On first initialization, scan existing checkpoints for backward compatibility
+            if not self._retention_initialized:
+                manager.scan_and_register_existing_checkpoints(
+                    steps_per_epoch=self.ft_spec.steps_per_epoch
+                )
+                self._retention_initialized = True
+
+            self._retention_managers[name] = manager
+
+        return self._retention_managers[name]
+
     def save(
         self,
         engine: TrainEngine | TrainController,
@@ -94,10 +165,12 @@ class Saver:
         processor: AutoProcessor | None = None,
         base_model_path: str | None = None,
     ):
-        if not self.freq_ctl.check(
-            epochs=int(step == self.ft_spec.steps_per_epoch - 1), steps=1
-        ):
+        # Check if we should save based on frequency
+        is_epoch_end = step == self.ft_spec.steps_per_epoch - 1
+        if not self.freq_ctl.check(epochs=int(is_epoch_end), steps=1):
             return
+
+        # Save checkpoint
         path = Saver.get_model_save_path(
             self.config.experiment_name,
             self.config.trial_name,
@@ -118,3 +191,14 @@ class Saver:
             base_model_path=base_model_path,
         )
         engine.save(meta)
+
+        # Register checkpoint with retention manager
+        retention_manager = self._get_retention_manager(name)
+        if retention_manager is not None:
+            retention_manager.register_checkpoint(
+                checkpoint_path=path,
+                epoch=epoch,
+                step=step,
+                global_step=global_step,
+                is_epoch_checkpoint=is_epoch_end,
+            )

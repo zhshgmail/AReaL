@@ -690,14 +690,21 @@ Configuration for experiment recovery and fault tolerance.
 
 Configuration for model checkpoint saving scheduling and timing.
 
-| Parameter         | Type            | Default      | Description                                                    |
-| ----------------- | --------------- | ------------ | -------------------------------------------------------------- |
-| `experiment_name` | string          | **Required** | -                                                              |
-| `trial_name`      | string          | **Required** | -                                                              |
-| `fileroot`        | string          | **Required** | -                                                              |
-| `freq_epochs`     | integer \| None | `None`       | Trigger frequency in epochs. None disables epoch-based saving. |
-| `freq_steps`      | integer \| None | `None`       | Trigger frequency in steps. None disables step-based saving.   |
-| `freq_secs`       | integer \| None | `None`       | Trigger frequency in seconds. None disables time-based saving. |
+| Parameter                   | Type            | Default      | Description                                                                                                                                                                                         |
+| --------------------------- | --------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `experiment_name`           | string          | **Required** | -                                                                                                                                                                                                   |
+| `trial_name`                | string          | **Required** | -                                                                                                                                                                                                   |
+| `fileroot`                  | string          | **Required** | -                                                                                                                                                                                                   |
+| `freq_epochs`               | integer \| None | `None`       | Trigger frequency in epochs. None disables epoch-based saving.                                                                                                                                      |
+| `freq_steps`                | integer \| None | `None`       | Trigger frequency in steps. None disables step-based saving.                                                                                                                                        |
+| `freq_secs`                 | integer \| None | `None`       | Trigger frequency in seconds. None disables time-based saving.                                                                                                                                      |
+| `enable_retention`          | boolean         | `False`      | Enable checkpoint retention management. When False, all checkpoints are kept.                                                                                                                       |
+| `epoch_max_to_keep`         | integer \| None | `None`       | Maximum number of epoch-level checkpoints to keep. None means unlimited. Only effective when enable_retention=True.                                                                                 |
+| `step_max_to_keep`          | integer \| None | `None`       | Maximum number of step-level checkpoints to keep. None means unlimited. Only effective when enable_retention=True.                                                                                  |
+| `epoch_cleanup_action`      | string          | `"delete"`   | Cleanup action for old epoch-level checkpoints. **Choices:** `delete`, `archive`, `compress_archive`                                                                                                |
+| `step_cleanup_action`       | string          | `"delete"`   | Cleanup action for old step-level checkpoints. **Choices:** `delete`, `archive`, `compress_archive`                                                                                                 |
+| `archive_root`              | string \| None  | `None`       | Root directory for archived checkpoints. Required when cleanup_action is 'archive' or 'compress_archive'. If not specified, defaults to {fileroot}/checkpoints_archive/{user}/{experiment}/{trial}. |
+| `protect_epoch_checkpoints` | boolean         | `True`       | If True, epoch-level checkpoints are never deleted by retention policy, regardless of epoch_max_to_keep setting. Set to False to apply retention to epoch checkpoints.                              |
 
 (section-stats-logger)=
 

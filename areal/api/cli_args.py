@@ -991,6 +991,57 @@ class EvaluatorConfig(_Timer):
 class SaverConfig(_Timer):
     """Configuration for model checkpoint saving scheduling and timing."""
 
+    # Checkpoint Retention Configuration
+    enable_retention: bool = field(
+        default=False,
+        metadata={
+            "help": "Enable checkpoint retention management. When False, all checkpoints are kept."
+        },
+    )
+    epoch_max_to_keep: int | None = field(
+        default=None,
+        metadata={
+            "help": "Maximum number of epoch-level checkpoints to keep. None means unlimited. "
+            "Only effective when enable_retention=True."
+        },
+    )
+    step_max_to_keep: int | None = field(
+        default=None,
+        metadata={
+            "help": "Maximum number of step-level checkpoints to keep. None means unlimited. "
+            "Only effective when enable_retention=True."
+        },
+    )
+    epoch_cleanup_action: str = field(
+        default="delete",
+        metadata={
+            "help": "Cleanup action for old epoch-level checkpoints.",
+            "choices": ["delete", "archive", "compress_archive"],
+        },
+    )
+    step_cleanup_action: str = field(
+        default="delete",
+        metadata={
+            "help": "Cleanup action for old step-level checkpoints.",
+            "choices": ["delete", "archive", "compress_archive"],
+        },
+    )
+    archive_root: str | None = field(
+        default=None,
+        metadata={
+            "help": "Root directory for archived checkpoints. "
+            "Required when cleanup_action is 'archive' or 'compress_archive'. "
+            "If not specified, defaults to {fileroot}/checkpoints_archive/{user}/{experiment}/{trial}."
+        },
+    )
+    protect_epoch_checkpoints: bool = field(
+        default=True,
+        metadata={
+            "help": "If True, epoch-level checkpoints are never deleted by retention policy, "
+            "regardless of epoch_max_to_keep setting. Set to False to apply retention to epoch checkpoints."
+        },
+    )
+
 
 @dataclass
 class RecoverConfig(_Timer):
