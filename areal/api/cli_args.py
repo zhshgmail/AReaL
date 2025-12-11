@@ -17,6 +17,9 @@ from areal.utils import logging, name_resolve, pkg_version
 from areal.utils.constants import (
     PROX_LOGP_METHOD_RECOMPUTE,
     PROX_LOGP_METHODS_ALL,
+    REWARD_CONSECUTIVE_TIMEOUT_THRESHOLD,
+    REWARD_TIMEOUT_SECONDS,
+    SYMPY_DEFAULT_TIMEOUT_SECONDS,
 )
 from areal.utils.pkg_version import is_version_less
 
@@ -1588,6 +1591,34 @@ class SFTConfig(BaseExperimentConfig):
 
 
 @dataclass
+class RLVRConfig:
+    """Configuration for RLVR (Reinforcement Learning with Verifiable Rewards) workflow."""
+
+    sympy_timeout: float = field(
+        default=SYMPY_DEFAULT_TIMEOUT_SECONDS,
+        metadata={
+            "help": "Timeout for sympy symbolic comparison (seconds). "
+            "This is the inner timeout that kills only the nested sympy process."
+        },
+    )
+    reward_timeout: float = field(
+        default=REWARD_TIMEOUT_SECONDS,
+        metadata={
+            "help": "Timeout for entire reward computation (seconds). "
+            "This is the outer safety net timeout that kills the entire worker. "
+            "Should be slightly larger than sympy_timeout."
+        },
+    )
+    reward_consecutive_timeout_threshold: int = field(
+        default=REWARD_CONSECUTIVE_TIMEOUT_THRESHOLD,
+        metadata={
+            "help": "Number of consecutive timeouts before recreating the entire executor. "
+            "Helps clear out multiple stuck workers."
+        },
+    )
+
+
+@dataclass
 class RWConfig(BaseExperimentConfig):
     """Configuration for Reward Model (RW) training experiments."""
 
@@ -1605,6 +1636,7 @@ class PPOConfig(BaseExperimentConfig):
     actor: PPOActorConfig = field(default_factory=PPOActorConfig)
     ref: PPOActorConfig | None = field(default=None)
     critic: PPOCriticConfig | None = field(default=None)
+    rlvr: RLVRConfig = field(default_factory=RLVRConfig)
 
 
 @dataclass

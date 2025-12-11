@@ -1,5 +1,6 @@
 import asyncio
 import os
+import signal
 import threading
 import traceback
 import weakref
@@ -9,8 +10,23 @@ from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 
 from areal.utils import logging
+from areal.utils.constants import (
+    PROCESS_KILL_GRACEFUL_TIMEOUT_SECONDS,
+    REWARD_CONSECUTIVE_TIMEOUT_THRESHOLD,
+    REWARD_TIMEOUT_SECONDS,
+)
+from areal.utils.proc import kill_process_tree
 
 logger = logging.getLogger("Reward API")
+
+
+def _get_worker_pids(executor: ProcessPoolExecutor) -> list[int]:
+    """Extract worker process IDs from ProcessPoolExecutor."""
+    pids = []
+    if hasattr(executor, '_processes'):
+        # Internal CPython implementation: executor has _processes dict
+        pids = list(executor._processes.keys())
+    return pids
 
 
 def _get_device_count_safely() -> int:
@@ -62,17 +78,19 @@ class AsyncRewardWrapper:
     """
     Wraps a synchronous reward function to make it async with timeout handling.
     Automatically manages ProcessPoolExecutor lifecycle based on instance count.
-    Includes automatic recovery from broken process pools.
+    Includes automatic recovery from broken process pools and process killing on timeout.
     """
 
     _executors = {}
     _instance_counts = {}
+    _timeout_counts = {}  # Track consecutive timeouts per executor
+    _future_to_pid = {}  # Map future objects to their worker PIDs for timeout handling
     _lock = threading.Lock()
 
     def __init__(
         self,
         reward_fn: Callable,
-        timeout_seconds: float = 15,
+        timeout_seconds: float = REWARD_TIMEOUT_SECONDS,
         max_workers: int | None = None,
         max_retries: int = 3,
     ):
@@ -149,15 +167,66 @@ class AsyncRewardWrapper:
                     executor,
                     partial(self.reward_fn, *args, **kwargs),
                 )
+
+                # Track worker PIDs for timeout handling
+                # Note: Worker assignment happens after submit, we estimate from executor state
+                worker_pids = _get_worker_pids(executor)
+                future_id = id(future)
+                if worker_pids:
+                    # Heuristic: round-robin assignment based on task count
+                    # In practice, ProcessPoolExecutor maintains internal task queue
+                    with self._lock:
+                        self._future_to_pid[future_id] = worker_pids[0] if worker_pids else None
+
                 reward = await asyncio.wait_for(
                     future,
                     timeout=self.timeout_seconds,
                 )
+                # Reset timeout counter on success and cleanup
+                with self._lock:
+                    self._timeout_counts[self._executor_key] = 0
+                    self._future_to_pid.pop(future_id, None)
                 return reward
             except asyncio.TimeoutError:
+                # CRITICAL: Kill the worker process to prevent resource starvation
+                # This is essential when reward functions (e.g., sympy) consume multiple GBs
+
+                # Step 1: Kill the worker process FIRST to stop resource consumption immediately
+                worker_pid = self._future_to_pid.get(id(future))
+                if worker_pid is not None:
+                    kill_process_tree(
+                        parent_pid=worker_pid,
+                        timeout=PROCESS_KILL_GRACEFUL_TIMEOUT_SECONDS,
+                        include_parent=True,
+                        graceful=True,
+                    )
+                    with self._lock:
+                        self._future_to_pid.pop(id(future), None)
+
+                # Step 2: Then cancel the future to clean up asyncio state
+                # Note: This returns False (already executing), but helps with cleanup
+                future.cancel()
+
+                # Track consecutive timeouts per executor
+                with self._lock:
+                    timeout_count = self._timeout_counts.get(self._executor_key, 0) + 1
+                    self._timeout_counts[self._executor_key] = timeout_count
+
                 logger.warning(
-                    f"Computing reward timeout after {self.timeout_seconds}s. Set reward to 0."
+                    f"Computing reward timeout after {self.timeout_seconds}s. "
+                    f"Set reward to 0. (timeout #{timeout_count} for this executor) "
+                    f"[Worker PID: {worker_pid}]"
                 )
+
+                # If too many consecutive timeouts, recreate entire executor to clear stuck workers
+                if timeout_count >= REWARD_CONSECUTIVE_TIMEOUT_THRESHOLD:
+                    logger.warning(
+                        f"Too many timeouts ({timeout_count}). Recreating executor to clear all stuck processes."
+                    )
+                    self._recreate_executor(self._executor_key, self.max_workers)
+                    with self._lock:
+                        self._timeout_counts[self._executor_key] = 0
+
                 return 0
             except BrokenProcessPool as e:
                 last_exception = e

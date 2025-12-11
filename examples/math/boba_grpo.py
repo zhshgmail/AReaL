@@ -44,13 +44,16 @@ def get_boba_math_dataset(path, tokenizer):
 
 
 def boba_reward_fn(
-    prompts, completions, prompt_ids, completion_ids, solutions, **kwargs
+    prompts, completions, prompt_ids, completion_ids, solutions, rlvr_config=None, **kwargs
 ):
     from areal.reward.math_parser import process_results
 
+    # Use configured sympy timeout if available, otherwise use default (True)
+    timeout = rlvr_config.sympy_timeout if rlvr_config else True
+
     label = 0
     for sol in solutions:
-        x = process_results(completions, sol)
+        x = process_results(completions, sol, timeout=timeout)
         label = label or x[0]
     return label
 
@@ -76,6 +79,7 @@ def main(args):
             ),
             get_input_ids_fn=get_input_ids_fn,
             data_extract_prompt_fn=data_extract_prompt_fn,
+            rlvr_config=config.rlvr,
         )
         trainer.train(workflow, eval_workflow=None)
 
