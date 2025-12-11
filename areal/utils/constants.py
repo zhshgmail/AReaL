@@ -4,6 +4,22 @@ import datetime
 # We set a large value to avoid timeout issues during generation.
 DIST_GROUP_DEFAULT_TIMEOUT = datetime.timedelta(seconds=7200)
 
+# Timeout for sympy operations in math_parser.call_with_timeout() (seconds)
+# Used by math reward functions when symbolic comparison is needed
+SYMPY_DEFAULT_TIMEOUT_SECONDS = 20
+
+# Default timeout for AsyncRewardWrapper (seconds)
+# Outer safety net that kills entire worker process if reward computation hangs
+REWARD_TIMEOUT_SECONDS = 30
+
+# Number of consecutive timeouts before AsyncRewardWrapper recreates executor
+# Helps clear out multiple stuck workers
+REWARD_CONSECUTIVE_TIMEOUT_THRESHOLD = 3
+
+# Timeout for graceful process termination with SIGTERM (seconds)
+# Used by kill_process_tree() - after this timeout, uses SIGKILL
+PROCESS_KILL_GRACEFUL_TIMEOUT_SECONDS = 3
+
 # Proximal log-probability computation methods for decoupled PPO
 # These control how the proximal policy log-probabilities are computed
 PROX_LOGP_METHOD_RECOMPUTE = (

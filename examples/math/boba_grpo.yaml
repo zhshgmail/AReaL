@@ -32,6 +32,19 @@ gconfig:
   greedy: false
   temperature: 1.0
 
+rlvr:
+  # Timeout for sympy symbolic comparison (seconds)
+  # This is the inner timeout that kills only the nested sympy process
+  sympy_timeout: 20
+
+  # Timeout for entire reward computation (seconds)
+  # This is the outer safety net timeout that kills the entire worker
+  # Should be slightly larger than sympy_timeout
+  reward_timeout: 30
+
+  # Number of consecutive timeouts before recreating the entire executor
+  reward_consecutive_timeout_threshold: 3
+
 actor:
   experiment_name: ${experiment_name}
   trial_name: ${trial_name}

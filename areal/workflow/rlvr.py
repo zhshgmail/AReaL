@@ -62,9 +62,11 @@ class RLVRWorkflow(RolloutWorkflow):
         data_extract_prompt_fn: Callable[
             [dict[str, Any]], Any
         ] = default_data_extract_prompt_fn,
+        rlvr_config: Any = None,
     ):
         self.reward_fn = reward_fn
         self.tokenizer = tokenizer
+        self.rlvr_config = rlvr_config
         if isinstance(self.tokenizer, str):
             from areal.utils.hf_utils import load_hf_tokenizer
 
@@ -75,7 +77,13 @@ class RLVRWorkflow(RolloutWorkflow):
         self.dump_dir = dump_dir
         self.rollout_stat_scope = rollout_stat_scope
         if not isinstance(reward_fn, str):
-            self.async_reward_fn = AsyncRewardWrapper(reward_fn)
+            # Pass timeout only if config provided, otherwise use default
+            if rlvr_config:
+                self.async_reward_fn = AsyncRewardWrapper(
+                    reward_fn, timeout_seconds=rlvr_config.reward_timeout
+                )
+            else:
+                self.async_reward_fn = AsyncRewardWrapper(reward_fn)
         self.get_input_ids_fn = get_input_ids_fn
         self.data_extract_prompt_fn = data_extract_prompt_fn
         if self.dump_dir is not None and not os.path.exists(self.dump_dir):
@@ -99,12 +107,16 @@ class RLVRWorkflow(RolloutWorkflow):
             Reward value and decoded completion string.
         """
         completions_str = self.tokenizer.decode(resp.output_tokens)
+        # Pass rlvr_config to reward function if available
+        kwargs = dict(task_data)
+        if self.rlvr_config is not None:
+            kwargs["rlvr_config"] = self.rlvr_config
         reward = await self.async_reward_fn(
             prompt_str,
             completions_str,
             resp.input_tokens,
             resp.output_tokens,
-            **task_data,
+            **kwargs,
         )
 
         return reward, completions_str
@@ -145,7 +157,13 @@ class RLVRWorkflow(RolloutWorkflow):
         # NOTE: load reward function dynamically if given as string
         if isinstance(self.reward_fn, str):
             self.reward_fn = import_from_string(self.reward_fn)
-            self.async_reward_fn = AsyncRewardWrapper(self.reward_fn)
+            # Pass timeout only if config provided, otherwise use default
+            if self.rlvr_config:
+                self.async_reward_fn = AsyncRewardWrapper(
+                    self.reward_fn, timeout_seconds=self.rlvr_config.reward_timeout
+                )
+            else:
+                self.async_reward_fn = AsyncRewardWrapper(self.reward_fn)
 
         input_ids = self.get_input_ids_fn(
             self.data_extract_prompt_fn(data),

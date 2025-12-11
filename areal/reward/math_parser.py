@@ -11,6 +11,7 @@ from sympy.parsing.sympy_parser import parse_expr
 from word2number import w2n
 
 from areal.utils import logging
+from areal.utils.constants import SYMPY_DEFAULT_TIMEOUT_SECONDS
 
 logger = logging.getLogger("math parser")
 
@@ -496,7 +497,7 @@ def math_equal(
     reference: float | str,
     include_percentage: bool = True,
     is_close: bool = True,
-    timeout: bool = False,
+    timeout: bool | float = False,
 ) -> bool:
     """
     Exact match of math if and only if:
@@ -671,8 +672,14 @@ def math_equal(
 
     # symbolic equal with sympy
     if timeout:
-        if call_with_timeout(symbolic_equal_process, prediction, reference):
-            return True
+        # If timeout is numeric, use that value; if True, don't pass timeout to use default
+        if isinstance(timeout, (int, float)):
+            if call_with_timeout(symbolic_equal_process, prediction, reference, timeout=timeout):
+                return True
+        else:
+            # timeout is True (not a number), so don't pass timeout parameter to use default
+            if call_with_timeout(symbolic_equal_process, prediction, reference):
+                return True
     else:
         if symbolic_equal(prediction, reference):
             return True
@@ -680,10 +687,13 @@ def math_equal(
     return False
 
 
-def call_with_timeout(func, *args, timeout=3, **kwargs):
+def call_with_timeout(func, *args, timeout=SYMPY_DEFAULT_TIMEOUT_SECONDS, **kwargs):
     output_queue = multiprocessing.Queue()
     process_args = args + (output_queue,)
     process = multiprocessing.Process(target=func, args=process_args, kwargs=kwargs)
+    # Make daemon so it's automatically killed when parent (ProcessPoolExecutor worker) dies
+    # This prevents orphaned processes when AsyncRewardWrapper kills the worker on timeout
+    process.daemon = True
     process.start()
     process.join(timeout)
 
@@ -755,7 +765,7 @@ def symbolic_equal(a, b):
     return False
 
 
-def process_results(answer, solution):
+def process_results(answer, solution, timeout: bool | float = False):
     try:
         extracted_answer = extract_answer(answer, "math", use_last_number=False)
         extracted_solution = extract_answer(solution, "math", use_last_number=True)
@@ -771,7 +781,7 @@ def process_results(answer, solution):
             "",
         ]:
             retval = 0
-        elif math_equal(extracted_answer, extracted_solution, timeout=False):
+        elif math_equal(extracted_answer, extracted_solution, timeout=timeout):
             # elif call_with_timeout(math_equal, extracted_answer, extracted_solution):
             retval = 1
         else:
